@@ -28,7 +28,7 @@ npm ci
 npm run dev -- --port 5178 --strictPort
 ```
 
-Open <http://127.0.0.1:5178/verse-recall/>. The development server binds only to loopback.
+Open <http://127.0.0.1:5178/>. The development server binds only to loopback.
 Stop it with Ctrl+C; restart with the command above.
 
 ```powershell
@@ -37,20 +37,22 @@ npm run preview -- --port 4178 --strictPort
 ```
 
 Production output is in `dist`; preview it at
-<http://127.0.0.1:4178/verse-recall/>. Keep the same origin/port to retain the same
+<http://127.0.0.1:4178/>. Keep the same origin/port to retain the same
 browser save. Moving from localhost to a hosted site does not automatically move
 data: export a private backup on the old origin and import it on the new one.
 
 ## GitHub Pages
 
-The Vite base is `/verse-recall/`, for a repository named **verse-recall**.
-The planned project URL is `https://adamsdenniskariuki.github.io/verse-recall/`.
-This URL is not a claim that deployment is already live.
+Repository: <https://github.com/adamsdenniskariuki/verse-recall>.
+Production domain: **https://verserecall.madebyfavor.com/**.
+Vite builds with root base `/`, not the repository subpath `/verse-recall/`.
+The production domain requires its DNS record and a valid GitHub Pages certificate
+before HTTPS can be considered ready.
 
-After repository/public-content approval, enable **Settings → Pages → Build and
-deployment → Source: GitHub Actions**. A push to `main` or a manual run of
+**Settings → Pages → Build and deployment → Source: GitHub Actions** is the
+deployment source. A push to `main` or a manual run of
 **Build and deploy Pages** restores locked dependencies, runs unit tests, builds,
-and runs the browser suite against the production project path before deploying.
+and runs the browser suite against the production root path before deploying.
 Only `dist` is uploaded as the Pages artifact; test output, backups and source
 receipts are not part of that artifact. The public repository itself contains the
 reviewed source, tests, docs and the six public-domain source receipts.
@@ -58,16 +60,27 @@ reviewed source, tests, docs and the six public-domain source receipts.
 The workflow uses pinned GitHub-maintained actions. Build jobs have read-only
 repository access; only the deployment job gets `pages: write` and `id-token:
 write`. No custom secret or API key is required. A failed test blocks deployment.
-The workflow has not been executed in GitHub until the repository is approved
-and created. Changing the repository name requires updating the Vite base and
-production-test URL; a custom domain would require separate configuration.
+The repository Pages custom-domain setting and `public/CNAME` must both be
+`verserecall.madebyfavor.com`. At the DNS provider, create only this DNS-only record:
+
+| Type | Name | Target |
+|---|---|---|
+| CNAME | `verserecall` | `adamsdenniskariuki.github.io` |
+
+Do not change the apex `madebyfavor.com` or other subdomains. Keep proxying off for
+certificate provisioning. After DNS resolves and GitHub issues the certificate,
+enable **Enforce HTTPS** and verify the production URL and its JS/CSS assets.
+The repository's `github.io/verse-recall/` address may redirect to the custom
+domain; this root-base build is not intended to run under that subpath directly.
+Use the Actions run and Pages settings to inspect actual deployment/certificate
+status rather than treating this documented URL as proof of live readiness.
 
 ```powershell
 npm run build
 npm run test:pages
 ```
 
-This starts a temporary production preview on port 4179 at `/verse-recall/`,
+This starts a temporary production preview on port 4179 at `/`,
 tests built JS/CSS, navigation, reload/resume and the complete browser suite, then
 stops the preview. There is no server-side routing: the app uses local screen
 state, so Pages needs no SPA 404 workaround.
@@ -392,5 +405,5 @@ with reliable offline updates; encrypted backups, CSV support and further schema
 migrations; multi-tab sync;
 manual screen-reader/device audit; optional audio and speed mode; licensed API
 integration; accounts/sync, name clearance and custom domains.
-The Pages workflow is prepared; actual publication still requires owner approval
-and a successful first GitHub deployment.
+DNS propagation and initial HTTPS certificate issuance are hosting prerequisites,
+not application features. They must be verified separately from a passing build.

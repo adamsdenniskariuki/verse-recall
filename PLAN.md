@@ -4,8 +4,8 @@
 
 A calm, accurate Bible-memory puzzle by Made by Favor. Build the complete learning
 loop around three curated references in WEB British and BSB before expanding the
-catalogue. The standalone app is prepared for a GitHub Pages project site, with
-publication gated on the owner's review of the public repository contents.
+catalogue. The standalone app targets GitHub Pages on
+`verserecall.madebyfavor.com`, using only reviewed public source and no private saves.
 
 Renamed from WordKeep for display only. Keep the legacy internal package name,
 storage keys, JSON format identifiers and passage IDs for saved-data and backup
@@ -38,9 +38,10 @@ compatibility; suggested filenames and visible branding use Verse Recall.
    progress/reviews and valid active session. Validate the complete file, preview a
    non-destructive merge, then explicitly confirm any overwrite. Deduplicate exact
    content, preserve stable IDs, and reset only changed content revisions.
-8. **Static hosting:** build with `/verse-recall/` asset paths, verify the production
-   browser experience at that path, then deploy only `dist` with GitHub Pages
-   after publication approval. Keep personal runtime data and test output private.
+8. **Static hosting:** build with root `/` asset paths for
+   `verserecall.madebyfavor.com`, verify the production browser experience at that
+   path, then deploy only `dist` with GitHub Pages. Verify DNS and certificate
+   readiness independently. Keep personal runtime data and test output private.
 
 ## Reversible implementation choices
 
@@ -64,7 +65,7 @@ compatibility; suggested filenames and visible branding use Verse Recall.
 
 30 official passages, full PWA/offline lifecycle, encrypted backups/CSV, external
 Bible APIs, more licensed translations, accounts/sync, timers/audio, brand clearance,
-custom domains and automatic cloud sync. API.Bible requires explicit rights review for
+automatic cloud sync. API.Bible requires explicit rights review for
 exercises and caching. General multi-tab reconciliation and full screen-reader/
 physical-device audits remain future work.
 

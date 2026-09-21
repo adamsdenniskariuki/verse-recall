@@ -30,9 +30,9 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Test content and application logic
         run: npm test
-      - name: Typecheck and build for the project path
+      - name: Typecheck and build for the custom-domain root
         run: npm run build
-      - name: Test the production site at /verse-recall/
+      - name: Test the production site at the custom-domain root
         run: npm run test:pages
       - name: Configure Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5

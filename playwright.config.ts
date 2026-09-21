@@ -8,7 +8,7 @@ export default defineConfig({
   expect: { timeout: 5000 },
   reporter: 'list',
   use: {
-    baseURL: process.env.WORDKEEP_TEST_URL ?? 'http://127.0.0.1:5180/verse-recall/',
+    baseURL: process.env.WORDKEEP_TEST_URL ?? 'http://127.0.0.1:5180/',
     browserName: 'chromium',
     headless: true,
     viewport: { width: 390, height: 844 },
@@ -16,7 +16,7 @@ export default defineConfig({
   },
   webServer: process.env.WORDKEEP_TEST_URL ? undefined : {
     command: 'npm run dev -- --port 5180 --strictPort',
-    url: 'http://127.0.0.1:5180/verse-recall/',
+    url: 'http://127.0.0.1:5180/',
     reuseExistingServer: false,
   },
 });

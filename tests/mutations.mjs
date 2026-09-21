@@ -69,8 +69,8 @@ const cases = [
     "'verse-recall-backup.verse-recall.json'", "'wordkeep-backup.wordkeep.json'", 'browser'],
   ['Bible thought logo adapts without changing accessible branding', 'src/assets/verse-recall-mark.svg',
     'd="M31 4H37A6 6 0 0 1 37 16H31A6 6 0 0 1 31 4Z"', 'd=""', 'browser'],
-  ['Pages production assets and navigation stay under the project path', 'vite.config.ts',
-    "base: '/verse-recall/'", "base: '/'", 'pages'],
+  ['Pages production assets and navigation use the custom-domain root', 'vite.config.ts',
+    "base: '/'", "base: '/verse-recall/'", 'pages'],
 ];
 await mkdir('verification', { recursive: true });
 const report = [];
