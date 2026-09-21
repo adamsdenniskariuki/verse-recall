@@ -1,0 +1,38 @@
+{
+  "word-in-heart:webbe:2020-stable-2026-09-12": {
+    "text": "I have hidden your word in my heart, that I might not sin against you.",
+    "url": "https://ebible.org/eng-webbe/PSA119.htm",
+    "sha256": "a2db06118c69452f21deb4b1a8fab2eb350a176674cac0b0e4e7f7f401d76d7f",
+    "retrievedAt": "2026-09-20T23:46:15.733Z"
+  },
+  "day-and-night:webbe:2020-stable-2026-09-12": {
+    "text": "This book of the law shall not depart from your mouth, but you shall meditate on it day and night, that you may observe to do according to all that is written in it; for then you shall make your way prosperous, and then you shall have good success.",
+    "url": "https://ebible.org/eng-webbe/JOS01.htm",
+    "sha256": "7bf1561dbe41f83533f1d1fdd86594431861dd12651e6f18d9700eb78eab16a6",
+    "retrievedAt": "2026-09-20T23:46:16.089Z"
+  },
+  "peace-with-you:webbe:2020-stable-2026-09-12": {
+    "text": "Peace I leave with you. My peace I give to you; not as the world gives, I give to you. Don’t let your heart be troubled, neither let it be fearful.",
+    "url": "https://ebible.org/eng-webbe/JHN14.htm",
+    "sha256": "f036868183ff2fc48f7535e1f8cb50c907952c9c8bae8f90c416ea58a21ff2df",
+    "retrievedAt": "2026-09-20T23:46:16.450Z"
+  },
+  "word-in-heart:bsb:official-text-snapshot-2026-09-20": {
+    "text": "I have hidden Your word in my heart that I might not sin against You.",
+    "url": "https://bereanbible.com/bsb.txt",
+    "sha256": "7b3268309565774a4a87bb0902111716b84c36b8ee89e10ec3a1bc8df3b4715c",
+    "retrievedAt": "2026-09-20T23:46:20.203Z"
+  },
+  "day-and-night:bsb:official-text-snapshot-2026-09-20": {
+    "text": "This Book of the Law must not depart from your mouth; meditate on it day and night, so that you may be careful to do everything written in it. For then you will prosper and succeed in all you do.",
+    "url": "https://bereanbible.com/bsb.txt",
+    "sha256": "7b3268309565774a4a87bb0902111716b84c36b8ee89e10ec3a1bc8df3b4715c",
+    "retrievedAt": "2026-09-20T23:46:20.215Z"
+  },
+  "peace-with-you:bsb:official-text-snapshot-2026-09-20": {
+    "text": "Peace I leave with you; My peace I give to you. I do not give to you as the world gives. Do not let your hearts be troubled; do not be afraid.",
+    "url": "https://bereanbible.com/bsb.txt",
+    "sha256": "7b3268309565774a4a87bb0902111716b84c36b8ee89e10ec3a1bc8df3b4715c",
+    "retrievedAt": "2026-09-20T23:46:20.229Z"
+  }
+}

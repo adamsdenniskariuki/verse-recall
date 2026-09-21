@@ -1,0 +1,16 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+verification/
+*.wordkeep.json
+*.verse-recall.json
+backups/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.log
+.DS_Store
+Thumbs.db

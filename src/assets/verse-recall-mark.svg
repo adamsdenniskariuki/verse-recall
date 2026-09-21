@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
+  <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path data-part="book" d="M5 24C12 21 18 22 24 26C30 22 36 21 43 24V42C36 39 30 40 24 44C18 40 12 39 5 42Z"/>
+    <path d="M24 26V44"/>
+    <path data-part="cross" d="M14 27V35M10.5 30.5H17.5"/>
+    <path data-part="thought" d="M31 4H37A6 6 0 0 1 37 16H31A6 6 0 0 1 31 4Z"/>
+  </g>
+  <g fill="currentColor">
+    <circle cx="25" cy="19" r="1.8"/>
+    <circle cx="21" cy="21" r="1.2"/>
+  </g>
+</svg>
