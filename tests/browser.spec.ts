@@ -661,6 +661,10 @@ async function chooseBibleVerse(page: Page, translation: string, book: string, c
 
 test('Bible picker adds official OT and NT verses and transfers progress', async ({ page, browser }) => {
   const bibleRequests: string[] = [];
+  await page.route('**/bibles/**/*.json', async route => {
+    await new Promise(resolve => setTimeout(resolve, 80));
+    await route.continue();
+  });
   page.on('request', request => { if (request.url().includes('/bibles/')) bibleRequests.push(request.url()); });
   await page.goto('./');
   await expect(page.locator('.verse-card')).toHaveCount(3);

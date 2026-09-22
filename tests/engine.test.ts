@@ -476,3 +476,33 @@ test('Bible loading validates assets and rejects unsupported ranges', async () =
     assert.ok((await resolveBibleSelection(selection('webbe', 'EXO', 2, 1))).text);
   });
 });
+
+test('concurrent Bible loads share requests and retry failures', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = new Map<string, number>();
+  globalThis.fetch = async input => {
+    const path = String(input);
+    requests.set(path, (requests.get(path) ?? 0) + 1);
+    await new Promise(resolve => setTimeout(resolve, 30));
+    if (path.endsWith('webbe/NUM-3.json') && requests.get(path) === 1) return new Response('Temporarily unavailable', { status: 503 });
+    return new Response(new Uint8Array(readFileSync(new URL(`../public${path}`, import.meta.url))));
+  };
+  try {
+    const results = await Promise.all([
+      resolveBibleSelection(selection('webbe', 'NUM', 2, 1)),
+      resolveBibleSelection(selection('webbe', 'NUM', 2, 2)),
+      resolveBibleSelection(selection('webbe', 'NUM', 2, 1)),
+    ]);
+    assert.ok(results.every(p => p.text.length > 0));
+    assert.equal(requests.get(`/bibles/${BIBLE_SNAPSHOT}/webbe/NUM-2.json`), 1);
+    assert.ok([...requests.values()].every(count => count === 1));
+    const failed = await Promise.allSettled([
+      resolveBibleSelection(selection('webbe', 'NUM', 3, 1)),
+      resolveBibleSelection(selection('webbe', 'NUM', 3, 2)),
+    ]);
+    assert.ok(failed.every(result => result.status === 'rejected'));
+    assert.equal(requests.get(`/bibles/${BIBLE_SNAPSHOT}/webbe/NUM-3.json`), 1);
+    assert.ok((await resolveBibleSelection(selection('webbe', 'NUM', 3, 1))).text);
+    assert.equal(requests.get(`/bibles/${BIBLE_SNAPSHOT}/webbe/NUM-3.json`), 2);
+  } finally { globalThis.fetch = originalFetch; }
+});

@@ -39,7 +39,9 @@ function validManifest(value: unknown): value is BibleManifest {
 }
 
 let manifest: BibleManifest | undefined;
+let manifestLoading: Promise<BibleManifest> | undefined;
 const chapters = new Map<string, Record<string, string>>();
+const chaptersLoading = new Map<string, Promise<Record<string, string>>>();
 const verified = new Map<string, Passage>();
 const base = () => `${import.meta.env?.BASE_URL ?? '/'}bibles/${BIBLE_SNAPSHOT}/`;
 const digest = async (bytes: Uint8Array<ArrayBuffer>) =>
@@ -57,11 +59,16 @@ async function checkedJson(path: string, hash: string, limit: number): Promise<u
 
 export async function loadBibleManifest(): Promise<BibleManifest> {
   if (manifest) return manifest;
-  const value = await checkedJson('manifest.json', BIBLE_MANIFEST_SHA256, 1_500_000);
-  if (!validManifest(value)) throw new Error('Invalid Bible catalogue.');
-  // The exact manifest digest is compiled into the app; source selection never trusts imported metadata.
-  manifest = value;
-  return manifest;
+  if (manifestLoading) return manifestLoading;
+  manifestLoading = (async () => {
+    const value = await checkedJson('manifest.json', BIBLE_MANIFEST_SHA256, 1_500_000);
+    if (!validManifest(value)) throw new Error('Invalid Bible catalogue.');
+    // The exact manifest digest is compiled into the app; source selection never trusts imported metadata.
+    manifest = value;
+    return manifest;
+  })();
+  try { return await manifestLoading; }
+  finally { manifestLoading = undefined; }
 }
 
 export function validBibleSelection(value: unknown): value is BibleSelection {
@@ -83,12 +90,19 @@ export async function readBibleChapter(translation: BibleTranslation, bookId: st
   if (!chapter) throw new Error('This chapter is not in the selected Bible edition.');
   const cached = chapters.get(chapter.path);
   if (cached) return cached;
-  const value = await checkedJson(chapter.path, chapter.sha256, 250_000);
-  if (!record(value) || value.snapshot !== BIBLE_SNAPSHOT || value.translation !== translation ||
-      value.book !== bookId || value.chapter !== chapterNumber || !stringRecord(value.verses)) throw new Error('Invalid official chapter data.');
-  const verses = value.verses;
-  chapters.set(chapter.path, verses);
-  return verses;
+  const inFlight = chaptersLoading.get(chapter.path);
+  if (inFlight) return inFlight;
+  const loading = (async () => {
+    const value = await checkedJson(chapter.path, chapter.sha256, 250_000);
+    if (!record(value) || value.snapshot !== BIBLE_SNAPSHOT || value.translation !== translation ||
+        value.book !== bookId || value.chapter !== chapterNumber || !stringRecord(value.verses)) throw new Error('Invalid official chapter data.');
+    const verses = value.verses;
+    chapters.set(chapter.path, verses);
+    return verses;
+  })();
+  chaptersLoading.set(chapter.path, loading);
+  try { return await loading; }
+  finally { chaptersLoading.delete(chapter.path); }
 }
 
 export async function resolveBibleSelection(value: unknown): Promise<Passage> {

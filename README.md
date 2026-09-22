@@ -199,7 +199,8 @@ not the full Bible texts. The app fetches its shipped index on first browsing
 JSON. Each chapter is checked against its manifest hash, and the manifest against
 the compiled hash. Runtime requests use this site's static assets, never a
 third-party Bible API. Missing/network/integrity errors are visible and do not add
-a passage.
+a passage. Concurrent requests for the same index or chapter share the in-flight
+load; failed loads are released so a retry can fetch again.
 
 Backups retain the existing version-2 envelope, original storage keys and personal
 data. A new optional `official` array contains only reference descriptors:
@@ -471,7 +472,7 @@ with `npx playwright install chromium`. Browser tests automatically start/reuse 
 local Vite server on port 5180. Production Pages tests use a separate preview on
 port 4179, so they exercise the built artifact rather than the development server.
 
-There are **22 engine/storage/content/transfer tests, 15 browser tests and one
+There are **23 engine/storage/content/transfer tests, 15 browser tests and one
 production Pages test**. Every test has a
 targeted, real behaviour mutation in `tests\mutations.mjs`: baseline pass, deliberate
 break, assertion failure, source restoration in `finally`, then targeted pass.

@@ -81,6 +81,8 @@ const cases = [
     'state.official = [...existing, selection];', 'state.official = [...existing];', 'browser'],
   ['Bible picker shows loading errors and rejects oversized ranges', 'src/bible-catalog.ts',
     'text.length > 2000 || text.trim().split(/\\s+/u).length > 120', 'text.length > 200000 || text.trim().split(/\\s+/u).length > 12000', 'browser'],
+  ['concurrent Bible loads share requests and retry failures', 'src/bible-catalog.ts',
+    'if (inFlight) return inFlight;', 'if (false) return inFlight;', undefined],
 ];
 await mkdir('verification', { recursive: true });
 const report = [];
