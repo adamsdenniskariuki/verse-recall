@@ -71,6 +71,16 @@ const cases = [
     'd="M31 4H37A6 6 0 0 1 37 16H31A6 6 0 0 1 31 4Z"', 'd=""', 'browser'],
   ['Pages production assets and navigation use the custom-domain root', 'vite.config.ts',
     "base: '/'", "base: '/verse-recall/'", 'pages'],
+  ['official catalogue covers both Testaments with exact source words', 'src/bible-catalog.ts',
+    "}).join('\\n');", "}).join('\\n') + ' altered';"],
+  ['official selections restore and transfer without trusting imported text', 'src/transfer.ts',
+    'next.official = [...selections.values()];', 'next.official = [];'],
+  ['Bible loading validates assets and rejects unsupported ranges', 'src/bible-catalog.ts',
+    'bytes.length > limit || await digest(bytes) !== hash', 'bytes.length > limit'],
+  ['Bible picker adds official OT and NT verses and transfers progress', 'src/main.ts',
+    'state.official = [...existing, selection];', 'state.official = [...existing];', 'browser'],
+  ['Bible picker shows loading errors and rejects oversized ranges', 'src/bible-catalog.ts',
+    'text.length > 2000 || text.trim().split(/\\s+/u).length > 120', 'text.length > 200000 || text.trim().split(/\\s+/u).length > 12000', 'browser'],
 ];
 await mkdir('verification', { recursive: true });
 const report = [];

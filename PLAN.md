@@ -42,6 +42,12 @@ compatibility; suggested filenames and visible branding use Verse Recall.
    `verserecall.madebyfavor.com`, verify the production browser experience at that
    path, then deploy only `dist` with GitHub Pages. Verify DNS and certificate
    readiness independently. Keep personal runtime data and test output private.
+9. **Official Bible picker:** select WEB British or BSB through searchable
+   book/chapter/verse controls with an exact preview and optional bounded range.
+   Cover the shared 66-book canon and all 1,189 chapters per edition using official
+   public-domain/CC0 text-only downloads. Lazy-load hash-verified chapter assets.
+   Store source reference descriptors and revalidate them on reload/import, while
+   preserving starter passages, personal entries and current practice.
 
 ## Reversible implementation choices
 
@@ -60,10 +66,15 @@ compatibility; suggested filenames and visible branding use Verse Recall.
   needs an explicit option in a read-only preview and final confirmation.
 - Exports are private, unencrypted local files. No upload, cloud sync or implied
   copyright permissions; no personal runtime data is written into source files.
+- Up to 100 additional official selections; repeated identical snapshot/reference
+  adds are no-ops. Ranges exceeding 120 words/2,000 characters or crossing blank
+  source references are rejected, never truncated or substituted.
+- Keep edition-specific numbering and source hashes. Future catalogue updates must
+  preserve prior snapshot assets; unknown editions produce visible errors.
 
 ## Deferred
 
-30 official passages, full PWA/offline lifecycle, encrypted backups/CSV, external
+Expanded curated plans, full PWA/offline lifecycle, encrypted backups/CSV, external
 Bible APIs, more licensed translations, accounts/sync, timers/audio, brand clearance,
 automatic cloud sync. API.Bible requires explicit rights review for
 exercises and caching. General multi-tab reconciliation and full screen-reader/

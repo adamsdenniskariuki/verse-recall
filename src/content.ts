@@ -12,6 +12,7 @@ export interface Passage {
   text: string;
   source: string;
   personal?: PersonalVerse;
+  catalogue?: { key: string; sourceSha256: string; snapshot: string };
   mapping: {
     scheme: string;
     book: string;
@@ -100,6 +101,7 @@ export const passages: readonly Passage[] = [
 ];
 
 export function passageKey(p: Passage): string {
+  if (p.catalogue) return p.catalogue.key;
   if (p.personal) return `personal:${p.personal.id}:${p.personal.revision}`;
   return `${p.id}:${p.translation}:${p.edition}`;
 }
@@ -122,8 +124,8 @@ export interface ContentProvider {
   get(key: string): Passage | undefined;
 }
 
-export function createProvider(personal: readonly PersonalVerse[] = []): ContentProvider {
-  const all = [...passages, ...personal.map(personalPassage)];
+export function createProvider(personal: readonly PersonalVerse[] = [], official: readonly Passage[] = []): ContentProvider {
+  const all = [...passages, ...personal.map(personalPassage), ...official];
   return {
     list: (translation, filter) => all.filter(p =>
       p.translation === translation && (filter === 'both' || p.testament === filter)),

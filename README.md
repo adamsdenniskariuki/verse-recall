@@ -46,8 +46,9 @@ data: export a private backup on the old origin and import it on the new one.
 Repository: <https://github.com/adamsdenniskariuki/verse-recall>.
 Production domain: **https://verserecall.madebyfavor.com/**.
 Vite builds with root base `/`, not the repository subpath `/verse-recall/`.
-The production domain requires its DNS record and a valid GitHub Pages certificate
-before HTTPS can be considered ready.
+The domain's DNS and GitHub Pages certificate have been verified, with HTTPS
+enforcement enabled. Future DNS changes or renewals should still be checked
+independently of application builds.
 
 **Settings → Pages → Build and deployment → Source: GitHub Actions** is the
 deployment source. A push to `main` or a manual run of
@@ -107,6 +108,12 @@ download filenames now use `verse-recall`. File names do not affect import parsi
 
 - **Three references in two translations:** Psalm 119:11, Joshua 1:8 and John 14:27,
   in World English Bible **British Edition** and Berean Standard Bible (BSB).
+- **Choose from the Bible:** browse beyond the starter passages using
+  Translation → searchable Book → Chapter → Verse, with an optional same-chapter
+  range and an exact source-text preview before adding. Both translations include
+  all 66 shared Protestant-canon books: 39 OT, 27 NT and 1,189 chapters each.
+  WEB's deuterocanonical books are deliberately not included. Verse numbering and
+  blank/omitted references follow each source independently.
 - **Read → Fill → Arrange → Recall → Results.** Fill gaps from a shuffled word bank;
   arrange all words; then type without a bank. Results show correct, incorrect,
   missing and extra words, alongside the intact source verse.
@@ -169,6 +176,46 @@ capitalisation, apostrophes and punctuation are never rewritten.
 Progress uses `passage ID + translation + edition`, not just a Bible reference.
 Switching translations cannot inherit another translation's progress.
 
+### Choosing official Bible passages
+
+On Today or Library, select **Choose from the Bible**. The Testament filter
+initially follows Preferences; you can change it inside the picker. Search by book
+name, choose chapter and verse, then read the exact preview. The default is a
+single verse. A range must stay within one chapter and fit **120 words / 2,000
+characters**. Longer selections and ranges crossing a blank source reference are
+explicitly rejected, never truncated or filled from another translation.
+
+**Add to my library** stores an official reference and selects that translation's
+library without replacing the current exercise. The starter six remain. Repeated
+adds of the same snapshot/reference are no-ops and keep progress; at most 100
+additional official selections are allowed, separately from 100 personal entries.
+Choose the new card to run Read → Fill → Arrange → Recall. Curated passages and
+catalogue selections remain edition-keyed; no mastery is silently transferred
+between different snapshots that happen to share a reference.
+
+The initial bundle contains only a snapshot identifier and manifest SHA-256,
+not the full Bible texts. The app fetches its shipped index on first browsing
+(or restoration of saved official references), followed only by required chapter
+JSON. Each chapter is checked against its manifest hash, and the manifest against
+the compiled hash. Runtime requests use this site's static assets, never a
+third-party Bible API. Missing/network/integrity errors are visible and do not add
+a passage.
+
+Backups retain the existing version-2 envelope, original storage keys and personal
+data. A new optional `official` array contains only reference descriptors:
+snapshot, translation, book code, chapter, start and end. Reload/import must
+resolve those references against trusted shipped assets before accepting state.
+Arbitrary imported text or extra "verified" fields cannot become official
+passages. Existing backups without `official` remain supported; older app builds
+without the picker cannot read new backups with official selections. Use the
+current app on the destination.
+
+A cold offline restore of added official selections needs matching source assets.
+If unavailable, the save is preserved and the loading error is shown; restore
+connectivity and reload instead of replacing that save. This is not an offline
+PWA. Future source updates must retain old snapshots to support their references;
+unknown snapshots are rejected rather than substituted with a new edition.
+
 ### Local storage and limitations
 
 Save schema version 2 uses `localStorage["wordkeep.prototype.v2"]`. Both reads and
@@ -191,7 +238,8 @@ ordinary save wins). Import confirmation checks whether the current state or
 stored value changed after preview, and refuses stale imports. Clearing browser
 site data loses progress unless you have exported a backup. The prototype is not
 a full installable/offline PWA; backups and browser storage are not encrypted.
-The page has no runtime network dependency after its assets load, but a cold
+Exercises use their loaded text without a remote API, but browsing or restoring
+official selections may need additional same-origin chapter assets. A cold
 offline reload is **not** guaranteed.
 
 ## Personal verses and device transfer
@@ -332,6 +380,46 @@ retrieval. Use the verified `eng-webbe` paths above, **not** the American WEB te
   [terms](https://api.bible/terms-and-conditions) impose translation-specific
   conditions and reporting requirements. No API keys belong in the client.
 
+### Full catalogue provenance
+
+The WEB British text-only VPL archive at
+<https://ebible.org/Scriptures/eng-webbe_vpl.zip> is linked by
+<https://ebible.org/find/details.php?id=eng-webbe>. Its included rights page
+explicitly identifies British Edition, 2020 stable text and public-domain copying.
+The publisher's VPL format removes notes, formatting, introductions and
+noncanonical headings. Only original verse text is shipped.
+
+BSB uses <https://bereanbible.com/bsb.txt>, linked by its official downloads page.
+The CC0/public-domain dedication above permits text redistribution. No audio,
+commentary or third-party source material is included in either catalogue.
+
+`sources\bible-catalog-receipt.json` records input hashes, the manifest hash,
+snapshot ID, exact scope and coverage. This snapshot contains 31,098 WEB British
+and 31,086 BSB references with text across the shared 66-book scope. Blank source
+references are recorded explicitly; totals are edition-specific and do not imply
+that every verse number exists in both translations.
+
+`tools\build_bible_catalog.py` reproducibly builds UTF-8 chapter assets from the
+official downloads in ignored `verification\bible-sources`:
+`eng-webbe_vpl.zip` and `bsb.txt`. It verifies book/chapter coverage and all six
+independent starter receipts before updating the manifest trust anchor.
+Generated assets are under `public\bibles\<snapshot>\`: 2,378 chapters and one
+manifest, about 9.05 MB uncompressed in total. Only the needed chapters load.
+`src\bible-version.ts` pins the manifest hash; each manifest entry pins its
+chapter hash. Raw ZIP/SQL/XML, notes, rights-page HTML and other archive files
+are not distributed as app assets.
+
+To deliberately rebuild a catalogue after obtaining those official inputs:
+
+```powershell
+python tools\build_bible_catalog.py
+npm run build
+npm test
+```
+
+Review source and receipt changes before adopting a new edition. Preserve old
+snapshot assets when existing saves depend on them.
+
 To retrieve a **new** source snapshot deliberately:
 
 ```powershell
@@ -355,12 +443,16 @@ Lightweight TypeScript and Vite, with no runtime framework or component dependen
 | `src\personal.ts` | Bounded schemas and SHA-256 content identities for personal text |
 | `src\transfer.ts` | Versioned JSON parsing, read-only merge plans, confirmed import and export |
 | `src\preferences.ts` | Accessible modal, verse editor and device-transfer UI |
+| `src\bible-catalog.ts`, `src\bible-version.ts` | Lazy integrity-checked official source provider and snapshot trust anchor |
+| `src\bible-picker.ts` | Searchable, accessible book/chapter/verse selection and exact preview |
+| `tools\build_bible_catalog.py` | Deterministic text-only chapter generation and source coverage validation |
 | `src\main.ts` | DOM renderer and accessible interactions |
 | `src\style.css`, `index.html` | Clawpilot tokens, Consolas-default app-wide typography, preset attributes and responsive layout |
 
-A later network provider can implement `ContentProvider` without changing scoring.
-Async loading, licensing enforcement and key-bearing server infrastructure are
-deliberately not implemented.
+A later external provider can implement `ContentProvider` without changing
+scoring. The official picker loads only shipped same-origin files; external API
+integration, translation-specific API licence enforcement and key-bearing server
+infrastructure remain deliberately out of scope.
 
 ## Verification
 
@@ -377,7 +469,7 @@ with `npx playwright install chromium`. Browser tests automatically start/reuse 
 local Vite server on port 5180. Production Pages tests use a separate preview on
 port 4179, so they exercise the built artifact rather than the development server.
 
-There are **19 engine/storage/content/transfer tests, 13 browser tests and one
+There are **22 engine/storage/content/transfer tests, 15 browser tests and one
 production Pages test**. Every test has a
 targeted, real behaviour mutation in `tests\mutations.mjs`: baseline pass, deliberate
 break, assertion failure, source restoration in `finally`, then targeted pass.
@@ -394,13 +486,18 @@ backup round trips into a fresh browser context, personal editor/play/revision
 flows, long unbroken references, and modal focus trapping/Escape/return focus.
 One- and two-word personal passages are checked through the whole learning loop.
 Every new regression also has a targeted failing mutation and restored passing run.
+Catalogue checks verify every chapter hash and available-verse index, all 66 books
+and 1,189 chapters per edition, non-demo OT/NT wording in both translations,
+tampered assets, network errors, limits, duplicate adds, reload and source-backed
+backup transfer into a fresh browser. The picker is checked on phone, tablet and
+desktop without placing full text in the initial bundle.
 Screenshots for each preset in Light/Dark at those sizes are written to
 `verification`, plus a phone arrangement screenshot. Automated DOM checks do not
 replace a full screen-reader audit or testing on physical mobile hardware.
 
 ## Next milestone, not implemented
 
-30-reference official collection; fuller spaced-repetition design; installable PWA
+Expanded curated learning plans; fuller spaced-repetition design; installable PWA
 with reliable offline updates; encrypted backups, CSV support and further schema
 migrations; multi-tab sync;
 manual screen-reader/device audit; optional audio and speed mode; licensed API

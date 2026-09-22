@@ -145,7 +145,7 @@ export class PreferencesDialog {
         <p class="small">Export a JSON backup here, move it securely to your other device, then open Verse Recall there and import it below. No cloud sync or upload occurs. Backups contain private text, progress and typed answers; anyone with the file can read them.</p>
         <div class="actions"><button type="button" data-dialog-action="export">Export backup</button><button type="button" data-dialog-action="template">Download verse template</button></div>
         <label class="file-label">Import verses or backup (JSON, max 1 MiB)<input type="file" id="import-file" accept=".json,application/json"></label>
-        <p class="small">Every file is validated before changes. Preview and confirm to merge; unrelated passages and reviews are never removed. Existing progress is kept unless you explicitly choose replacement.</p>
+        <p class="small">Every file is validated before changes. Official Bible selections are restored only after their source assets load and validate; personal text is never promoted to official content. Preview and confirm to merge; unrelated passages and reviews are never removed. Existing progress is kept unless you explicitly choose replacement.</p>
       </details>
       <div id="dialog-message" role="status" aria-live="polite" tabindex="-1"></div><section id="import-preview" aria-label="Import preview"></section></div>`;
   }

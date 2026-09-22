@@ -6,6 +6,9 @@ import { activeIndices, bankCorrect, compareRecall, finish, hint, nextStage, pla
 import { dueReviews, freshState, LEGACY_STORAGE_KEY, loadState, saveState, STORAGE_KEY, updatePreferences, validState, type StoragePort } from '../src/store';
 import { makePersonal, MAX_JSON_BYTES } from '../src/personal';
 import { confirmImport, exportBackup, parseImport, planImport } from '../src/transfer';
+import { createHash } from 'node:crypto';
+import { BIBLE_MANIFEST_SHA256, BIBLE_SNAPSHOT } from '../src/bible-version';
+import { loadBibleManifest, resolveBibleSelection, selectedBiblePassages, type BibleSelection } from '../src/bible-catalog';
 
 const p = passages[0];
 const memory = (): StoragePort & { data: Map<string, string> } => {
@@ -370,4 +373,106 @@ test('accent defaults preserve saved choices', async () => {
     assert.equal(saveState(storage, state), null);
     assert.deepEqual((await loadState(storage)).state, state);
   }
+});
+
+async function withBibleFiles(action: () => Promise<void>, corruptPath = ''): Promise<void> {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const path = String(input);
+    assert.ok(path.startsWith(`/bibles/${BIBLE_SNAPSHOT}/`), 'only versioned same-origin catalogue requests');
+    const bytes = readFileSync(new URL(`../public${path}`, import.meta.url));
+    if (corruptPath && path.endsWith(corruptPath)) {
+      const altered = JSON.parse(bytes.toString());
+      altered.verses['1'] = 'Altered official verse text.';
+      return new Response(JSON.stringify(altered));
+    }
+    return new Response(new Uint8Array(bytes));
+  };
+  try { await action(); } finally { globalThis.fetch = originalFetch; }
+}
+const selection = (translation: 'webbe' | 'bsb', book: string, chapter: number, start: number, end = start): BibleSelection =>
+  ({ snapshot: BIBLE_SNAPSHOT, translation, book, chapter, start, end });
+
+test('official catalogue covers both Testaments with exact source words', async () => {
+  const root = new URL(`../public/bibles/${BIBLE_SNAPSHOT}/`, import.meta.url);
+  const bytes = readFileSync(new URL('manifest.json', root));
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), BIBLE_MANIFEST_SHA256);
+  await withBibleFiles(async () => {
+    const index = await loadBibleManifest();
+    for (const translation of ['webbe', 'bsb'] as const) {
+      const books = index.translations[translation].books;
+      assert.equal(books.length, 66);
+      assert.equal(books.filter(b => b.testament === 'OT').length, 39);
+      assert.equal(books.filter(b => b.testament === 'NT').length, 27);
+      assert.equal(books.reduce((sum, b) => sum + b.chapters.length, 0), 1189);
+      for (const book of books) for (const chapter of book.chapters) {
+        const raw = readFileSync(new URL(chapter.path, root));
+        assert.equal(createHash('sha256').update(raw).digest('hex'), chapter.sha256);
+        const body = JSON.parse(raw.toString()) as { verses: Record<string, string> };
+        assert.deepEqual(Object.entries(body.verses).filter(([, text]) => text.length > 0).map(([v]) => Number(v)), chapter.verses);
+      }
+    }
+    const expectations = [
+      ['webbe', 'ISA', 40, 31, 'but those who wait for the LORD will renew their strength. They will mount up with wings like eagles. They will run, and not be weary. They will walk, and not faint.'],
+      ['webbe', 'JOH', 3, 16, 'For God so loved the world, that he gave his only born Son, that whoever believes in him should not perish, but have eternal life.'],
+      ['bsb', 'ISA', 40, 31, 'But those who wait upon the LORD will renew their strength; they will mount up with wings like eagles; they will run and not grow weary, they will walk and not faint.'],
+      ['bsb', 'JOH', 3, 16, 'For God so loved the world that He gave His one and only Son, that everyone who believes in Him shall not perish but have eternal life.'],
+    ] as const;
+    for (const [translation, book, chapter, verse, text] of expectations) {
+      const p = await resolveBibleSelection(selection(translation, book, chapter, verse));
+      assert.equal(p.text, text);
+      assert.equal(p.translation, translation);
+      assert.equal(p.testament, book === 'ISA' ? 'OT' : 'NT');
+      assert.ok(p.catalogue?.sourceSha256);
+    }
+  });
+});
+
+test('official selections restore and transfer without trusting imported text', async () => {
+  await withBibleFiles(async () => {
+    const state = freshState();
+    state.official = [selection('webbe', 'ISA', 40, 31), selection('bsb', 'JOH', 3, 16)];
+    for (const s of state.official) await resolveBibleSelection(s);
+    const p = selectedBiblePassages(state.official)[0];
+    state.run = { ...startRun(p, 'review'), answer: 'preserve my answer' };
+    const progress = finish(p, { ...state.run, answer: p.text }, undefined, 100);
+    state.progress[progress.key] = progress;
+    const store = memory();
+    assert.equal(saveState(store, state), null);
+    assert.deepEqual((await loadState(store)).state, state);
+    const raw = exportBackup(state);
+    assert.equal(raw.includes(p.text), false, 'official text is not trusted from backup payloads');
+    const incoming = await parseImport(raw);
+    const empty = freshState();
+    assert.deepEqual(confirmImport(empty, planImport(empty, incoming)), state);
+    const same = planImport(state, incoming);
+    assert.equal(same.next.official!.length, 2);
+    assert.equal(same.next.progress[progress.key].attempts, 1);
+    const fake = JSON.parse(raw);
+    fake.state.official[0].text = 'arbitrary imported text';
+    await assert.rejects(parseImport(JSON.stringify(fake)), /Invalid official Bible/);
+    delete fake.state.official[0].text;
+    fake.state.official[0].snapshot = 'unavailable-edition';
+    await assert.rejects(parseImport(JSON.stringify(fake)), /Invalid official Bible/);
+  });
+});
+
+test('Bible loading validates assets and rejects unsupported ranges', async () => {
+  await withBibleFiles(async () => {
+    await assert.rejects(resolveBibleSelection(selection('bsb', 'GEN', 1, 1, 31)), /exceeds the exercise limit/);
+    await assert.rejects(resolveBibleSelection(selection('bsb', 'ACT', 8, 37)), /no text in this edition/);
+    await assert.rejects(resolveBibleSelection(selection('webbe', 'XXX', 1, 1)), /Book not found/);
+    await assert.rejects(resolveBibleSelection(selection('webbe', 'GEN', 99, 1)), /chapter is not/);
+  });
+  await withBibleFiles(async () => {
+    await assert.rejects(resolveBibleSelection(selection('webbe', 'EXO', 2, 1)), /source validation failed/);
+  }, 'webbe/EXO-2.json');
+  const fetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => { throw new Error('offline'); };
+    await assert.rejects(resolveBibleSelection(selection('webbe', 'LEV', 2, 1)), /Check your connection/);
+  } finally { globalThis.fetch = fetch; }
+  await withBibleFiles(async () => {
+    assert.ok((await resolveBibleSelection(selection('webbe', 'EXO', 2, 1))).text);
+  });
 });

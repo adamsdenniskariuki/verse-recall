@@ -5,12 +5,15 @@ import { dueReviews, LEGACY_STORAGE_KEY, loadState, saveState, STORAGE_KEY, upda
 import { escapeHtml as e } from './html';
 import { PreferencesDialog } from './preferences';
 import brandMark from './assets/verse-recall-mark.svg?raw';
+import { bibleSelectionKey, selectedBiblePassages } from './bible-catalog';
+import { BiblePicker } from './bible-picker';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const storage: StoragePort = {
   getItem: key => window.localStorage.getItem(key),
   setItem: (key, value) => window.localStorage.setItem(key, value),
 };
+app.textContent = 'Loading saved practice…';
 const loaded = await loadState(storage);
 let state = loaded.state;
 let saveError = loaded.error;
@@ -21,7 +24,7 @@ let feedback = '';
 let showBankFeedback = false;
 const media = matchMedia('(prefers-color-scheme: dark)');
 const date = (value: number) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(value);
-const provider = () => createProvider(state.personal);
+const provider = () => createProvider(state.personal, selectedBiblePassages(state.official));
 const label = (p: Passage) => `${p.reference} · ${translationName(p)}`;
 const runPassage = () => state.run ? provider().get(state.run.key) : undefined;
 
@@ -96,7 +99,7 @@ function home(): string {
     <section aria-labelledby="collection-heading"><div class="section-heading"><div><p class="eyebrow">${state.preferences.translation === 'personal' ? 'YOUR PERSONAL COLLECTION' : 'THE VERIFIED STARTER COLLECTION'}</p><h2 id="collection-heading">${view === 'library' ? 'Choose a passage' : 'Keep something close today'}</h2></div><span class="pill">${list.length} passages · ${collectionName(state.preferences.translation)}</span></div>
     <div class="verse-list">${list.map(card).join('') || '<p>No passages match this collection and Testament. Change the filter in Preferences, or add a personal passage.</p>'}</div>
     <p class="small collection-note">Six official texts stay intact. Personal passages are labelled separately and not independently verified. Progress stays separate for each text, translation and edition.</p>
-    <button class="text-button" data-action="add-personal">Add or import your own verses</button></section>
+    <div class="actions"><button data-action="browse-bibles" aria-haspopup="dialog" aria-controls="bible-picker">Choose from the Bible</button><button class="text-button" data-action="add-personal">Add or import your own verses</button></div></section>
     ${allProgress.length ? `<section class="schedule"><h2>Your next reviews</h2>${allProgress.map(item => {
       const p = provider().get(item.key)!;
       return `<div><span>${e(label(p))}</span><span>${item.due <= Date.now() ? 'Ready now' : e(date(item.due))}</span></div>`;
@@ -104,6 +107,11 @@ function home(): string {
     <section class="method"><p class="eyebrow">A SIMPLE WAY TO KEEP THE WORD</p><ol><li><b>01</b><span>Read<span>Let the words settle.</span></span></li><li><b>02</b><span>Fill<span>Find the missing words.</span></span></li><li><b>03</b><span>Arrange<span>Put the words in order.</span></span></li><li><b>04</b><span>Recall<span>Try without a word bank.</span></span></li></ol></section>`;
 }
 function source(p: Passage): string {
+  if (p.catalogue && p.translation !== 'personal') return `<details class="source"><summary>Official edition, source & rights</summary>
+    <p><strong>${e(editions[p.translation].name)}</strong></p><p>${e(p.edition)}</p>
+    <p>${e(editions[p.translation].attribution)}</p><p>${e(editions[p.translation].rights)}</p>
+    <p>Source-validated Bible selection. Exact reference: ${e(p.reference)}. Schema: ${e(p.mapping.scheme)}.</p>
+    <p><a href="${p.source}" target="_blank" rel="noreferrer">Official text source ↗</a> · <a href="${editions[p.translation].rightsUrl}" target="_blank" rel="noreferrer">Rights ↗</a></p></details>`;
   if (p.translation === 'personal') return `<details class="source"><summary>Personal text & rights</summary>
     <p><strong>Personal passage · not independently verified</strong></p><p>${e(translationName(p))} · ${e(p.edition)}</p>
     <p>Reference supplied by you: ${e(p.reference)}. No official numbering equivalence is asserted.</p>
@@ -223,11 +231,24 @@ const preferencesDialog = new PreferencesDialog({
   saveProblem: () => saveError,
   protectedSave: () => protectSave,
 });
+const biblePicker = new BiblePicker((selection, passage) => {
+  if (protectSave) throw new Error('Resolve the unreadable-save notice before adding a Bible passage. Your old save has not been changed.');
+  const key = bibleSelectionKey(selection);
+  const existing = state.official ?? [];
+  if (existing.some(s => bibleSelectionKey(s) === key)) return `${passage.reference} is already in your library. Progress is unchanged.`;
+  if (existing.length >= 100) throw new Error('The library limit is 100 added official selections. No passage was added.');
+  state.official = [...existing, selection];
+  state.preferences = { ...state.preferences, translation: selection.translation, filter: 'both' };
+  persist();
+  render();
+  return saveError ?? `${passage.reference} added to the ${collectionName(selection.translation)} library. Your current exercise is unchanged.`;
+});
 
 app.addEventListener('click', event => {
   const button = (event.target as Element).closest<HTMLElement>('button, a[data-nav]');
   if (!button) return;
   if (button.dataset.action === 'preferences') return preferencesDialog.open();
+  if (button.dataset.action === 'browse-bibles') return biblePicker.open(state.preferences.translation, state.preferences.filter);
   if (button.dataset.action === 'add-personal') return preferencesDialog.open('personal');
   if (button.dataset.nav) {
     event.preventDefault();
@@ -330,7 +351,7 @@ app.addEventListener('drop', event => {
 });
 // Detect reviews becoming due while Today is left open without disturbing typing.
 setInterval(() => {
-  if (view !== 'practice' && !preferencesDialog.dialog.open && document.activeElement === document.body) render();
+  if (view !== 'practice' && !preferencesDialog.dialog.open && !biblePicker.dialog.open && document.activeElement === document.body) render();
 }, 60_000);
 if (loaded.migrated) persist();
 render();

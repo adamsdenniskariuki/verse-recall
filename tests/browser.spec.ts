@@ -195,16 +195,16 @@ test('preferences dialog focus colour font and responsive sheet', async ({ page 
     await expect(page.locator('#answer')).toHaveValue('A draft to keep');
     for (let i = 0; i < 20; i++) {
       await page.keyboard.press('Tab');
-      expect(await page.evaluate(() => document.querySelector('dialog')!.contains(document.activeElement))).toBe(true);
+      expect(await page.evaluate(() => document.querySelector('#preferences-dialog')!.contains(document.activeElement))).toBe(true);
     }
-    const box = await page.locator('dialog').boundingBox();
+    const box = await page.locator('#preferences-dialog').boundingBox();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
     expect(box!.height).toBeLessThanOrEqual(viewport.height);
-    expect(await page.locator('dialog').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    expect(await page.locator('#preferences-dialog').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
     await page.screenshot({ path: `verification/preferences-${viewport.width}.png`, fullPage: true });
     await page.keyboard.press('Escape');
-    await expect(page.locator('dialog')).not.toBeVisible();
+    await expect(page.locator('#preferences-dialog')).not.toBeVisible();
     await expect(page.locator('#open-preferences')).toBeFocused();
   }
   await page.reload();
@@ -647,4 +647,104 @@ test('Bible thought logo adapts without changing accessible branding', async ({ 
     }
   }, previews);
   await page.screenshot({ path: 'verification/verse-recall-logo-closeup.png' });
+});
+
+async function chooseBibleVerse(page: Page, translation: string, book: string, chapter: string, verse: string) {
+  if (!await page.locator('#bible-picker').isVisible()) await page.locator('[data-action="browse-bibles"]').click();
+  await page.locator('#bible-translation').selectOption(translation);
+  await page.locator('#bible-testament').selectOption('both');
+  await page.locator('#bible-book-search').fill(book);
+  await page.locator('#bible-chapter').selectOption(chapter);
+  await page.locator('#bible-start').selectOption(verse);
+  await expect(page.locator('[data-bible-action="add"]')).toBeEnabled();
+}
+
+test('Bible picker adds official OT and NT verses and transfers progress', async ({ page, browser }) => {
+  const bibleRequests: string[] = [];
+  page.on('request', request => { if (request.url().includes('/bibles/')) bibleRequests.push(request.url()); });
+  await page.goto('./');
+  await expect(page.locator('.verse-card')).toHaveCount(3);
+  expect(bibleRequests).toEqual([]);
+  for (const translation of ['webbe', 'bsb']) {
+    await chooseBibleVerse(page, translation, 'Isaiah', '40', '31');
+    await expect(page.locator('#bible-preview h3')).toHaveText('Isaiah 40:31');
+    await expect(page.locator('#bible-preview blockquote')).toContainText(translation === 'webbe' ? 'They will mount up' : 'they will mount up');
+    await page.locator('[data-bible-action="add"]').click();
+    await expect(page.locator('#bible-status')).toContainText('added to');
+    await page.locator('[data-bible-action="add"]').click();
+    await expect(page.locator('#bible-status')).toContainText('already in your library');
+    await page.locator('#bible-testament').selectOption('NT');
+    await expect(page.locator('#bible-book')).toBeDisabled();
+    await expect(page.locator('#bible-status')).toContainText('No books match');
+    await chooseBibleVerse(page, translation, 'John', '3', '16');
+    await expect(page.locator('#bible-preview h3')).toHaveText('John 3:16');
+    await expect(page.locator('#bible-preview blockquote')).toContainText(translation === 'webbe' ? 'only born Son' : 'one and only Son');
+    await page.locator('[data-bible-action="add"]').click();
+    await expect(page.locator('#bible-status')).toContainText('added to');
+    await page.locator('[data-bible-action="close"]').click();
+  }
+  const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY);
+  expect(saved.official).toHaveLength(4);
+  expect(saved.personal).toEqual([]);
+  expect(bibleRequests.filter(url => url.endsWith('/manifest.json'))).toHaveLength(1);
+  expect(bibleRequests.length).toBeLessThan(15);
+  await page.reload();
+  const card = page.locator('.verse-card').filter({ has: page.getByRole('heading', { name: 'John 3:16', exact: true }) });
+  await card.locator('[data-start]').click();
+  const text = (await page.locator('blockquote').textContent())!;
+  await expect(page.locator('.practice-heading')).toContainText('Official Bible selection');
+  await page.locator('[data-action="next"]').click();
+  await solveBank(page);
+  await solveBank(page);
+  await page.locator('#answer').fill(text);
+  await page.locator('[data-action="check-recall"]').click();
+  await expect(page.locator('.results .lead')).toContainText('unaided');
+  await preferences(page);
+  await page.locator('#transfer-panel summary').click();
+  const downloaded = page.waitForEvent('download');
+  await page.locator('[data-dialog-action="export"]').click();
+  const file = await downloaded;
+  const bytes = await readFile((await file.path())!);
+  const nextDevice = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  try {
+    const fresh = await nextDevice.newPage();
+    await fresh.goto(page.url());
+    await preferences(fresh);
+    await fresh.locator('#transfer-panel summary').click();
+    await fresh.locator('#import-file').setInputFiles({ name: 'verse-recall-backup.verse-recall.json', mimeType: 'application/json', buffer: bytes });
+    await expect(fresh.locator('#import-preview')).toContainText('4 source-validated official Bible selection');
+    await fresh.locator('[data-dialog-action="confirm-import"]').click();
+    await expect(fresh.locator('#dialog-message')).toContainText('saved on this device');
+    await closePreferences(fresh);
+    await expect(fresh.locator('.results .lead')).toContainText('unaided');
+    const restored = await fresh.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY);
+    expect(restored.official).toHaveLength(4);
+    expect(Object.values(restored.progress).map(p => (p as { unaided: number }).unaided)).toEqual([1]);
+    await fresh.reload();
+    await expect(fresh.locator('.results .lead')).toContainText('unaided');
+  } finally { await nextDevice.close(); }
+});
+
+test('Bible picker shows loading errors and rejects oversized ranges', async ({ page }) => {
+  await page.route('**/bibles/**/manifest.json', route => route.abort());
+  await page.goto('./');
+  await page.locator('[data-action="browse-bibles"]').click();
+  await expect(page.locator('#bible-picker [role="alert"]')).toContainText('Check your connection');
+  await page.unroute('**/bibles/**/manifest.json');
+  await page.locator('[data-bible-action="retry"]').click();
+  await expect(page.locator('[data-bible-action="add"]')).toBeEnabled();
+  await page.locator('#bible-end').selectOption('31');
+  await expect(page.locator('#bible-status')).toContainText('exceeds the exercise limit');
+  await expect(page.locator('[data-bible-action="add"]')).toBeDisabled();
+  await page.locator('#bible-end').selectOption('2');
+  await expect(page.locator('[data-bible-action="add"]')).toBeEnabled();
+  await expect(page.locator('#bible-preview h3')).toHaveText('Genesis 1:1–2');
+  for (const width of [390, 1024, 1440]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    expect(await page.locator('#bible-picker').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await page.screenshot({ path: `verification/bible-picker-${width}.png`, fullPage: true });
+  }
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-action="browse-bibles"]')).toBeFocused();
+  expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBeNull();
 });

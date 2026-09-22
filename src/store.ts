@@ -1,6 +1,7 @@
 import { createProvider, type Filter, type Translation, type PersonalVerse } from './content';
 import { activeIndices, words, type Progress, type Run } from './engine';
 import { exactKeys, MAX_JSON_BYTES, MAX_PERSONAL, parseBoundedJson, record, safeTree, validPersonal, verifyRevisions } from './personal';
+import { bibleSelectionKey, prepareOfficialSelections, selectedBiblePassages, validBibleSelection, type BibleSelection } from './bible-catalog';
 
 export interface Preferences {
   translation: Translation;
@@ -13,6 +14,7 @@ export interface Preferences {
 export interface SavedState {
   version: 2;
   personal: PersonalVerse[];
+  official?: BibleSelection[];
   preferences: Preferences;
   progress: Record<string, Progress>;
   run: Run | null;
@@ -36,17 +38,21 @@ const oneOf = (value: unknown, values: readonly string[]) => typeof value === 's
 
 export function validState(value: unknown): value is SavedState {
   if (!record(value) || value.version !== 2 || !record(value.preferences) || !record(value.progress) ||
-      !safeTree(value) || !exactKeys(value, ['version', 'personal', 'preferences', 'progress', 'run']) ||
+      !safeTree(value) || !exactKeys(value, ['version', 'personal', 'preferences', 'progress', 'run', ...(Object.hasOwn(value, 'official') ? ['official'] : [])]) ||
       !Array.isArray(value.personal) || value.personal.length > MAX_PERSONAL || !value.personal.every(validPersonal) ||
       new Set(value.personal.map(v => v.id)).size !== value.personal.length ||
       new Set(value.personal.map(v => v.revision)).size !== value.personal.length) return false;
-  const provider = createProvider(value.personal);
+  if (Object.hasOwn(value, 'official') && (!Array.isArray(value.official) || value.official.length > 100 ||
+      !value.official.every(validBibleSelection) || new Set(value.official.map(bibleSelectionKey)).size !== value.official.length ||
+      selectedBiblePassages(value.official).length !== value.official.length)) return false;
+  const official = Array.isArray(value.official) && value.official.every(validBibleSelection) ? value.official : [];
+  const provider = createProvider(value.personal, selectedBiblePassages(official));
   const p = value.preferences;
   if (!exactKeys(p, ['translation', 'filter', 'preset', 'colour', 'accent', 'font']) ||
       !oneOf(p.translation, ['webbe', 'bsb', 'personal']) || !oneOf(p.filter, ['both', 'OT', 'NT']) ||
       !oneOf(p.preset, ['calm', 'study', 'focus']) || !oneOf(p.colour, ['light', 'dark', 'system']) ||
       !oneOf(p.accent, ['rose', 'neutral', 'blue', 'green', 'purple']) || !oneOf(p.font, ['segoe', 'aptos', 'calibri', 'mono']) ||
-      Object.keys(value.progress).length > MAX_PERSONAL + 6) return false;
+      Object.keys(value.progress).length > MAX_PERSONAL + official.length + 6) return false;
   for (const [key, progress] of Object.entries(value.progress)) {
     if (!provider.get(key) || !record(progress) || progress.key !== key ||
         !exactKeys(progress, ['key', 'attempts', 'unaided', 'streak', 'bankCompleted', 'lastResult', 'lastPractised', 'due']) ||
@@ -94,10 +100,13 @@ export async function loadState(storage: StoragePort): Promise<{ state: SavedSta
           !exactKeys(parsed.preferences, ['translation', 'filter', 'preset', 'colour'])) throw new Error('Unsupported legacy save');
       parsed = { ...parsed, version: 2, personal: [], preferences: { ...parsed.preferences, accent: 'purple', font: 'mono' } };
     }
+    await prepareOfficialSelections(parsed);
     if (!validState(parsed) || !await verifyRevisions(parsed.personal)) throw new Error('Unsupported or damaged save');
     return { state: parsed, error: null, migrated };
-  } catch {
-    return { state: freshState(), error: 'Your local save could not be read. It has not been overwritten. You can continue without saving, or explicitly replace it below.', migrated: false };
+  } catch (error) {
+    const catalogueProblem = error instanceof Error && /Bible|chapter|edition|verse|selection/i.test(error.message)
+      ? ` ${error.message} If the connection failed, restore it and reload before considering replacement.` : '';
+    return { state: freshState(), error: 'Your local save could not be read. It has not been overwritten.' + catalogueProblem + ' You can continue without saving, or explicitly replace it below.', migrated: false };
   }
 }
 

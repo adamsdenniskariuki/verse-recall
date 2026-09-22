@@ -1,6 +1,7 @@
 import { passageKey, personalPassage, type PersonalVerse } from './content';
 import { exactKeys, makePersonal, MAX_JSON_BYTES, MAX_PERSONAL, parseBoundedJson, record, validId, validVerseInput, verifyRevisions, verseFields } from './personal';
 import { validState, type SavedState } from './store';
+import { bibleSelectionKey, prepareOfficialSelections } from './bible-catalog';
 
 export type ImportPayload =
   | { kind: 'verses'; personal: PersonalVerse[] }
@@ -33,6 +34,7 @@ export async function parseImport(raw: string): Promise<ImportPayload> {
   catch (error) { throw new Error(error instanceof SyntaxError ? 'This is not valid JSON. Nothing has been changed.' : error instanceof Error ? error.message : 'Cannot read this JSON.'); }
   if (!record(value)) throw new Error('Expected a Verse Recall JSON object.');
   if (value.format === 'wordkeep-backup') {
+    await prepareOfficialSelections(value.state);
     if (!exactKeys(value, ['format', 'version', 'exportedAt', 'state']) || value.version !== 2 ||
         typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt)) ||
         !validState(value.state) || !await verifyRevisions(value.state.personal)) {
@@ -93,6 +95,12 @@ export function planImport(current: SavedState, incoming: ImportPayload, options
     }
   }
   if (incoming.kind === 'backup') {
+    if (incoming.state.official?.length) {
+      const selections = new Map((next.official ?? []).map(s => [bibleSelectionKey(s), s]));
+      for (const selection of incoming.state.official) selections.set(bibleSelectionKey(selection), structuredClone(selection));
+      next.official = [...selections.values()];
+      plan.warnings.push(`${incoming.state.official.length} source-validated official Bible selection(s) will be merged; identical references keep their existing progress.`);
+    }
     for (const progress of Object.values(incoming.state.progress)) {
       const key = remap.get(progress.key) ?? progress.key;
       if (Object.hasOwn(next.progress, key)) {
