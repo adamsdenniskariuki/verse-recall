@@ -408,6 +408,8 @@ manifest, about 9.05 MB uncompressed in total. Only the needed chapters load.
 `src\bible-version.ts` pins the manifest hash; each manifest entry pins its
 chapter hash. Raw ZIP/SQL/XML, notes, rights-page HTML and other archive files
 are not distributed as app assets.
+Git attributes disable newline conversion for catalogue assets so their integrity
+hashes remain valid on Windows as well as Linux checkouts.
 
 To deliberately rebuild a catalogue after obtaining those official inputs:
 

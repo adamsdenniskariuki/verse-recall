@@ -1,0 +1,2 @@
+# Catalogue integrity hashes require byte-identical checkout and deployment.
+public/bibles/** -text
