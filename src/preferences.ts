@@ -2,6 +2,7 @@ import { escapeHtml as e, options } from './html';
 import { makePersonal, MAX_JSON_BYTES } from './personal';
 import { confirmImport, defaultMergeOptions, exportBackup, parseImport, planImport, verseTemplate, type ImportPayload, type ImportPlan } from './transfer';
 import type { Preferences, SavedState } from './store';
+import { accents, fonts } from './theme';
 
 interface Host {
   state(): SavedState;
@@ -125,10 +126,10 @@ export class PreferencesDialog {
         <label>New passages<select id="filter" data-preference>${options(p.filter, [['both', 'Both Testaments'], ['OT', 'Old Testament'], ['NT', 'New Testament']])}</select></label>
         <label>Appearance<select id="preset" data-preference>${options(p.preset, [['calm', 'Calm'], ['study', 'Study'], ['focus', 'Focus']])}</select></label>
         <label>Colour mode<select id="colour" data-preference>${options(p.colour, [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']])}</select></label>
-        <label>Theme colour<select id="accent" data-preference>${options(p.accent, [['purple', 'Purple'], ['blue', 'Blue'], ['green', 'Green'], ['rose', 'Rose'], ['neutral', 'Neutral']])}</select></label>
-        <label>App font<select id="font" data-preference>${options(p.font, [['mono', 'Consolas'], ['segoe', 'Segoe UI'], ['aptos', 'Aptos'], ['calibri', 'Calibri']])}</select></label>
+        <label>Theme colour<select id="accent" data-preference>${options(p.accent, Object.entries(accents).map(([value, item]) => [value, item.label]))}</select></label>
+        <label>Reading font<select id="font" data-preference>${options(p.font, Object.entries(fonts).map(([value, item]) => [value, item.label]))}</select></label>
       </div><p class="font-preview verse">Joshua 1:8</p>
-      <p class="small">Defaults: Consolas and Purple. Calm: soft surfaces. Study: crisp structure. Focus: larger verse text. Your app font applies to all text and controls, using device-local fallbacks. These choices do not reset your exercise or reviews.</p></section>
+      <p class="small">Calm: soft surfaces. Study: crisp structure. Focus: larger verse text. Classic pairs a serif for Scripture with a clean interface font; Readable uses wider spacing and simple letterforms. System colour follows your device. These choices do not reset your exercise or reviews.</p></section>
       <details id="personal-panel"><summary>Personal verses <span class="small">· ${state.personal.length}/100</span></summary>
         <p class="small">Your own text, kept privately on this device. Not independently verified. Enter only text you are permitted to use; import does not grant redistribution rights.</p>
         <label>Add or edit<select id="edit-verse"><option value="">Add a new verse</option>${state.personal.map(v => `<option value="${e(v.id)}">${e(v.reference)} · ${e(v.translationLabel)}</option>`).join('')}</select></label>

@@ -7,6 +7,8 @@ import { dueReviews, freshState, LEGACY_STORAGE_KEY, loadState, saveState, STORA
 import { makePersonal, MAX_JSON_BYTES } from '../src/personal';
 import { confirmImport, exportBackup, parseImport, planImport } from '../src/transfer';
 import { createHash } from 'node:crypto';
+import { ACCENTS, choose, FONTS, type SavedState } from '../src/store';
+import { accentTokens, base, contrast, over, themeCss } from '../src/theme';
 import { BIBLE_MANIFEST_SHA256, BIBLE_SNAPSHOT } from '../src/bible-version';
 import { loadBibleManifest, resolveBibleSelection, selectedBiblePassages, type BibleSelection } from '../src/bible-catalog';
 
@@ -179,8 +181,10 @@ test('legacy saves migrate without overwriting originals', async () => {
   assert.equal(loaded.error, null);
   assert.equal(loaded.migrated, true);
   assert.equal(loaded.state.version, 2);
-  assert.equal(loaded.state.preferences.accent, 'purple');
-  assert.equal(loaded.state.preferences.font, 'mono');
+  assert.equal(loaded.state.preferences.accent, 'teal');
+  assert.equal(loaded.state.preferences.font, 'serif');
+  assert.deepEqual(loaded.state.preferences.chosen, ['preset', 'colour']);
+  assert.deepEqual(loaded.appearance, { accent: 'purple', font: 'mono' });
   assert.deepEqual(loaded.state.run, legacy.run);
   assert.deepEqual(loaded.state.progress, legacy.progress);
   assert.equal(saveState(storage, loaded.state), null);
@@ -354,9 +358,9 @@ test('short personal passages stay playable', async () => {
 });
 
 test('font defaults preserve saved choices', async () => {
-  assert.equal(freshState().preferences.font, 'mono');
+  assert.equal(freshState().preferences.font, 'serif');
   const storage = memory();
-  for (const font of ['segoe', 'aptos', 'calibri', 'mono'] as const) {
+  for (const font of FONTS) {
     const state = updatePreferences(freshState(), { font });
     state.run = { ...startRun(p, 'review'), answer: 'Keep my draft' };
     assert.equal(saveState(storage, state), null);
@@ -365,14 +369,101 @@ test('font defaults preserve saved choices', async () => {
 });
 
 test('accent defaults preserve saved choices', async () => {
-  assert.equal(freshState().preferences.accent, 'purple');
+  assert.equal(freshState().preferences.accent, 'teal');
   const storage = memory();
-  for (const accent of ['rose', 'neutral', 'blue', 'green', 'purple'] as const) {
+  for (const accent of ACCENTS) {
     const state = updatePreferences(freshState(), { accent });
     state.run = { ...startRun(p, 'review'), answer: 'Keep my answer', hints: 1, exposed: true };
     assert.equal(saveState(storage, state), null);
     assert.deepEqual((await loadState(storage)).state, state);
   }
+});
+
+test('unflagged appearance moves to new defaults while explicit choices stay', async () => {
+  const storage = memory();
+  const old = freshState() as SavedState & { preferences: Record<string, unknown> };
+  delete old.preferences.chosen;
+  old.preferences = { ...old.preferences, accent: 'purple', font: 'mono' };
+  storage.setItem(STORAGE_KEY, JSON.stringify(old));
+  let loaded = await loadState(storage);
+  assert.equal(loaded.error, null);
+  assert.equal(loaded.migrated, true);
+  assert.deepEqual(loaded.appearance, { accent: 'purple', font: 'mono' });
+  assert.equal(loaded.state.preferences.accent, 'teal');
+  assert.equal(loaded.state.preferences.font, 'serif');
+  assert.deepEqual(loaded.state.preferences.chosen, []);
+  assert.equal(saveState(storage, loaded.state), null);
+  loaded = await loadState(storage);
+  assert.equal(loaded.migrated, false, 'a flagged save is not migrated again');
+  assert.equal(loaded.appearance, null);
+
+  storage.setItem(STORAGE_KEY, JSON.stringify({ ...old, preferences: { ...old.preferences, accent: 'rose', font: 'segoe', colour: 'dark' } }));
+  loaded = await loadState(storage);
+  assert.equal(loaded.appearance, null, 'nothing was replaced');
+  assert.equal(loaded.state.preferences.accent, 'rose');
+  assert.equal(loaded.state.preferences.font, 'segoe');
+  assert.deepEqual(loaded.state.preferences.chosen, ['colour', 'accent', 'font']);
+
+  const kept = choose(loaded.state, { font: 'mono' });
+  assert.deepEqual(kept.preferences.chosen, ['colour', 'accent', 'font']);
+  assert.deepEqual(choose(freshState(), { accent: 'purple' }).preferences.chosen, ['accent']);
+  assert.equal(validState({ ...kept, preferences: { ...kept.preferences, chosen: ['font', 'font'] } }), false);
+  assert.equal(validState({ ...kept, preferences: { ...kept.preferences, chosen: ['translation'] } }), false);
+});
+
+test('old backups without appearance flags migrate on import', async () => {
+  const state = freshState() as SavedState & { preferences: Record<string, unknown> };
+  delete state.preferences.chosen;
+  state.preferences = { ...state.preferences, accent: 'purple', font: 'calibri' };
+  const raw = JSON.stringify({ format: 'wordkeep-backup', version: 2, exportedAt: '2026-01-01T00:00:00.000Z', state });
+  const incoming = await parseImport(raw);
+  assert.equal(incoming.kind, 'backup');
+  const restored = confirmImport(freshState(), planImport(freshState(), incoming));
+  assert.equal(restored.preferences.accent, 'teal');
+  assert.equal(restored.preferences.font, 'calibri');
+  assert.deepEqual(restored.preferences.chosen, ['font']);
+});
+
+test('every theme meets WCAG AA contrast', () => {
+  const failures: string[] = [];
+  const need = (label: string, ratio: number, min: number) => { if (ratio < min) failures.push(`${label} ${ratio.toFixed(2)} < ${min}`); };
+  for (const mode of ['light', 'dark'] as const) {
+    const b = base[mode];
+    const grounds = ['--cp-bg', '--cp-bg-elevated', '--cp-surface', '--cp-surface-soft'];
+    for (const ground of grounds) {
+      for (const text of ['--cp-text', '--cp-text-muted', '--cp-text-soft', '--cp-link']) need(`${mode} ${text} on ${ground}`, contrast(b[text], b[ground]), 4.5);
+      need(`${mode} border-strong on ${ground}`, contrast(b['--cp-border-strong'], b[ground]), 3);
+      for (const state of ['--cp-success', '--cp-danger']) need(`${mode} ${state} on ${ground}`, contrast(b[state], b[ground]), 3);
+    }
+    for (const accent of ACCENTS) {
+      const t = accentTokens(mode, accent);
+      const label = `${mode} ${accent}`;
+      need(`${label} fg on accent`, contrast(t['--cp-accent-fg'], t['--cp-accent']), 4.5);
+      need(`${label} fg on hover`, contrast(t['--cp-accent-fg'], t['--cp-accent-hover']), 4.5);
+      for (const ground of grounds) {
+        need(`${label} accent on ${ground}`, contrast(t['--cp-accent'], b[ground]), 4.5);
+        need(`${label} focus on ${ground}`, contrast(t['--cp-focus'], b[ground]), 3);
+        const soft = t['--cp-accent-soft'].startsWith('#') ? t['--cp-accent-soft'] : null;
+        const tinted = soft ?? over(t['--cp-accent'], mode === 'light' ? 0.08 : 0.14, b[ground]);
+        need(`${label} accent on soft over ${ground}`, contrast(t['--cp-accent'], tinted), 4.5);
+        need(`${label} text on soft over ${ground}`, contrast(b['--cp-text'], tinted), 4.5);
+      }
+    }
+  }
+  assert.deepEqual(failures, []);
+});
+
+test('first-paint tokens match the default theme', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const blockFor = (selector: string) => {
+    const start = html.indexOf(`${selector} {`);
+    assert.ok(start >= 0, selector);
+    return Object.fromEntries([...html.slice(start, html.indexOf('}', start)).matchAll(/(--cp-[\w-]+|color-scheme):\s*([^;]+);/gu)].map(m => [m[1], m[2].trim()]));
+  };
+  const defaults = freshState().preferences;
+  assert.deepEqual(blockFor(':root'), { ...base.light, ...accentTokens('light', defaults.accent) });
+  assert.deepEqual(blockFor('html[data-theme="dark"]'), { ...base.dark, ...accentTokens('dark', defaults.accent) });
+  assert.match(themeCss(), /html\[data-font="serif"\] \{\n {2}--font-ui: "Segoe UI"/u);
 });
 
 async function withBibleFiles(action: () => Promise<void>, corruptPath = ''): Promise<void> {

@@ -8,9 +8,17 @@ export interface Preferences {
   filter: Filter;
   preset: 'calm' | 'study' | 'focus';
   colour: 'light' | 'dark' | 'system';
-  accent: 'rose' | 'neutral' | 'blue' | 'green' | 'purple';
-  font: 'segoe' | 'aptos' | 'calibri' | 'mono';
+  accent: 'teal' | 'amber' | 'rose' | 'neutral' | 'blue' | 'green' | 'purple';
+  font: 'serif' | 'readable' | 'segoe' | 'aptos' | 'calibri' | 'mono';
+  /** Appearance settings the person explicitly chose. Unlisted settings follow the current defaults. */
+  chosen?: AppearanceKey[];
 }
+export const APPEARANCE_KEYS = ['preset', 'colour', 'accent', 'font'] as const;
+export type AppearanceKey = typeof APPEARANCE_KEYS[number];
+export const ACCENTS = ['teal', 'amber', 'rose', 'neutral', 'blue', 'green', 'purple'] as const;
+export const FONTS = ['serif', 'readable', 'segoe', 'aptos', 'calibri', 'mono'] as const;
+/** Appearance defaults before the 2026 refresh. Saves without `chosen` used these implicitly. */
+export const PREVIOUS_DEFAULTS = { preset: 'calm', colour: 'system', accent: 'purple', font: 'mono' } as const;
 export interface SavedState {
   version: 2;
   personal: PersonalVerse[];
@@ -27,9 +35,34 @@ export const STORAGE_KEY = 'wordkeep.prototype.v2';
 export const LEGACY_STORAGE_KEY = 'wordkeep.prototype.v1';
 export const freshState = (): SavedState => ({
   version: 2, personal: [],
-  preferences: { translation: 'webbe', filter: 'both', preset: 'calm', colour: 'system', accent: 'purple', font: 'mono' },
+  preferences: { translation: 'webbe', filter: 'both', preset: 'calm', colour: 'system', accent: 'teal', font: 'serif', chosen: [] },
   progress: {}, run: null,
 });
+export type AppearanceMigration = Partial<Pick<Preferences, 'accent' | 'font'>>;
+/**
+ * Saves and backups made before `chosen` existed cannot say whether a value was picked or inherited.
+ * Values that differ from the previous defaults were explicit choices and are kept. Previous defaults
+ * move to the new defaults. Returns the replaced values so the person can restore them, or null.
+ */
+export function migratePreferences(state: unknown): AppearanceMigration | null {
+  if (!record(state) || !record(state.preferences) || Object.hasOwn(state.preferences, 'chosen')) return null;
+  const p = state.preferences;
+  const next = freshState().preferences;
+  const chosen = APPEARANCE_KEYS.filter(key => Object.hasOwn(p, key) && p[key] !== PREVIOUS_DEFAULTS[key]);
+  const replaced: AppearanceMigration = {};
+  for (const key of ['accent', 'font'] as const) {
+    if (chosen.includes(key)) continue;
+    if (p[key] !== next[key]) (replaced as Record<string, unknown>)[key] = p[key] ?? PREVIOUS_DEFAULTS[key];
+    p[key] = next[key];
+  }
+  p.chosen = chosen;
+  return replaced;
+}
+export function choose(state: SavedState, patch: Partial<Preferences>): SavedState {
+  const chosen = new Set(state.preferences.chosen ?? []);
+  for (const key of APPEARANCE_KEYS) if (Object.hasOwn(patch, key)) chosen.add(key);
+  return updatePreferences(state, { ...patch, chosen: APPEARANCE_KEYS.filter(key => chosen.has(key)) });
+}
 const integer = (value: unknown): value is number =>
   Number.isSafeInteger(value) && (value as number) >= 0;
 const timestamp = (value: unknown): value is number =>
@@ -48,10 +81,12 @@ export function validState(value: unknown): value is SavedState {
   const official = Array.isArray(value.official) && value.official.every(validBibleSelection) ? value.official : [];
   const provider = createProvider(value.personal, selectedBiblePassages(official));
   const p = value.preferences;
-  if (!exactKeys(p, ['translation', 'filter', 'preset', 'colour', 'accent', 'font']) ||
+  if (!exactKeys(p, ['translation', 'filter', 'preset', 'colour', 'accent', 'font', ...(Object.hasOwn(p, 'chosen') ? ['chosen'] : [])]) ||
       !oneOf(p.translation, ['webbe', 'bsb', 'personal']) || !oneOf(p.filter, ['both', 'OT', 'NT']) ||
       !oneOf(p.preset, ['calm', 'study', 'focus']) || !oneOf(p.colour, ['light', 'dark', 'system']) ||
-      !oneOf(p.accent, ['rose', 'neutral', 'blue', 'green', 'purple']) || !oneOf(p.font, ['segoe', 'aptos', 'calibri', 'mono']) ||
+      !oneOf(p.accent, ACCENTS) || !oneOf(p.font, FONTS) ||
+      (Object.hasOwn(p, 'chosen') && (!Array.isArray(p.chosen) || !p.chosen.every(key => oneOf(key, APPEARANCE_KEYS)) ||
+        new Set(p.chosen).size !== p.chosen.length)) ||
       Object.keys(value.progress).length > MAX_PERSONAL + official.length + 6) return false;
   for (const [key, progress] of Object.entries(value.progress)) {
     if (!provider.get(key) || !record(progress) || progress.key !== key ||
@@ -87,26 +122,28 @@ export function validState(value: unknown): value is SavedState {
   return true;
 }
 
-export async function loadState(storage: StoragePort): Promise<{ state: SavedState; error: string | null; migrated: boolean }> {
+export interface Loaded { state: SavedState; error: string | null; migrated: boolean; appearance: AppearanceMigration | null }
+export async function loadState(storage: StoragePort): Promise<Loaded> {
   try {
     const current = storage.getItem(STORAGE_KEY);
     const raw = current ?? storage.getItem(LEGACY_STORAGE_KEY);
-    if (raw === null) return { state: freshState(), error: null, migrated: false };
+    if (raw === null) return { state: freshState(), error: null, migrated: false, appearance: null };
     let parsed = parseBoundedJson(raw);
-    const migrated = current === null;
-    if (migrated) {
+    if (current === null) {
       if (!record(parsed) || parsed.version !== 1 || !record(parsed.preferences) ||
           !exactKeys(parsed, ['version', 'preferences', 'progress', 'run']) ||
           !exactKeys(parsed.preferences, ['translation', 'filter', 'preset', 'colour'])) throw new Error('Unsupported legacy save');
-      parsed = { ...parsed, version: 2, personal: [], preferences: { ...parsed.preferences, accent: 'purple', font: 'mono' } };
+      parsed = { ...parsed, version: 2, personal: [], preferences: { ...parsed.preferences } };
     }
+    const appearance = migratePreferences(parsed);
     await prepareOfficialSelections(parsed);
     if (!validState(parsed) || !await verifyRevisions(parsed.personal)) throw new Error('Unsupported or damaged save');
-    return { state: parsed, error: null, migrated };
+    const changed = appearance && Object.keys(appearance).length ? appearance : null;
+    return { state: parsed, error: null, migrated: current === null || appearance !== null, appearance: changed };
   } catch (error) {
     const catalogueProblem = error instanceof Error && /Bible|chapter|edition|verse|selection/i.test(error.message)
       ? ` ${error.message} If the connection failed, restore it and reload before considering replacement.` : '';
-    return { state: freshState(), error: 'Your local save could not be read. It has not been overwritten.' + catalogueProblem + ' You can continue without saving, or explicitly replace it below.', migrated: false };
+    return { state: freshState(), error: 'Your local save could not be read. It has not been overwritten.' + catalogueProblem + ' You can continue without saving, or explicitly replace it below.', migrated: false, appearance: null };
   }
 }
 

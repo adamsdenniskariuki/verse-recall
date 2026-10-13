@@ -1,0 +1,12 @@
+html[data-preset="study"] .verse-card, html[data-preset="study"] .practice-card, html[data-preset="study"] .rhythm, html[data-preset="study"] .schedule { border-radius: 4px; border-color: var(--cp-border-strong); box-shadow: none; }
+html[data-preset="study"] button, html[data-preset="study"] select, html[data-preset="study"] textarea { border-radius: 4px; }
+html[data-preset="study"] .verse-list { gap: 0; }
+html[data-preset="study"] .verse-card + .verse-card { border-top: 0; }
+html[data-preset="study"] .practice-heading { border-left: 3px solid var(--cp-accent); padding-left: 20px; }
+html[data-preset="focus"] .rhythm { display: none; }
+html[data-preset="focus"] .hero { grid-template-columns: 1fr; max-width: 780px; }
+html[data-preset="focus"] .hero br { display: none; }
+html[data-preset="focus"] .card-index { display: none; }
+html[data-preset="focus"] .verse { font-size: 1.9rem; line-height: 1.9; }
+html[data-preset="focus"] .practice-card { background: var(--cp-bg); padding: 32px 0; border-width: 1px 0; border-radius: 0; box-shadow: none; }
+html[data-preset="focus"] .verse-card { background: var(--cp-bg); border-width: 0 0 1px; border-radius: 0; padding-inline: 0; box-shadow: none; }

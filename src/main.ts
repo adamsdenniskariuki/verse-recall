@@ -1,12 +1,15 @@
-import './style.css';
+import './styles/index.css';
 import { collectionName, createProvider, editions, passageKey, translationName, type Passage } from './content';
 import { activeIndices, bankCorrect, compareRecall, finish, hint, nextStage, normalizeWord, placeToken, slotCorrect, startRun, words, type Run } from './engine';
-import { dueReviews, LEGACY_STORAGE_KEY, loadState, saveState, STORAGE_KEY, updatePreferences, type StoragePort } from './store';
+import { choose, dueReviews, LEGACY_STORAGE_KEY, loadState, saveState, STORAGE_KEY, type AppearanceMigration, type StoragePort } from './store';
 import { escapeHtml as e } from './html';
 import { PreferencesDialog } from './preferences';
 import brandMark from './assets/verse-recall-mark.svg?raw';
 import { bibleSelectionKey, selectedBiblePassages } from './bible-catalog';
 import { BiblePicker } from './bible-picker';
+import { accents, fonts, installTheme } from './theme';
+
+installTheme();
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const storage: StoragePort = {
@@ -18,6 +21,7 @@ const loaded = await loadState(storage);
 let state = loaded.state;
 let saveError = loaded.error;
 let protectSave = Boolean(loaded.error);
+let appearanceNotice: AppearanceMigration | null = loaded.appearance;
 let view: 'today' | 'library' | 'practice' = state.run ? 'practice' : 'today';
 let selectedSlot: number | null = null;
 let feedback = '';
@@ -174,9 +178,16 @@ function results(p: Passage, run: Run): string {
     <p class="review-plan"><strong>Next review: ${e(date(progress.due))}</strong><br>${unaided ? 'Your interval grows with consecutive unaided recalls.' : 'Return in 10 minutes for a fresh recall, without the bank.'}</p>
     <div class="actions"><button class="primary" data-nav="today">Back to Today →</button><button data-start="${e(run.key)}">Practise from the beginning</button></div>${source(p)}</section>`;
 }
+function notice(): string {
+  if (!appearanceNotice) return '';
+  const previous = [appearanceNotice.font && fonts[appearanceNotice.font].label, appearanceNotice.accent && accents[appearanceNotice.accent].label.toLowerCase()].filter(Boolean).join(' and ');
+  return `<aside class="notice" aria-labelledby="notice-title"><div><strong id="notice-title">We’ve refreshed the look</strong>
+    <p>Verse Recall now uses easier-to-read type and calmer colours. Your verses, progress and reviews are unchanged.</p></div>
+    <div class="notice-actions"><button class="primary" data-action="keep-look">Keep the new look</button><button data-action="restore-look">Restore ${e(previous)}</button></div></aside>`;
+}
 function render(focusTitle = false): void {
-  app.innerHTML = `<div class="shell">${header()}<div id="save-warning"></div><main id="main">${view === 'practice' ? practice() : home()}</main>
-    <footer><div><strong>Verse Recall</strong><span>BY MADE BY FAVOR</span></div><p>Joshua 1:8</p><p class="small">Local prototype · Working name · No tracking</p><div id="save-status" aria-live="polite"></div></footer></div>`;
+  app.innerHTML = `<div class="shell">${header()}<div id="save-warning"></div>${notice()}<main id="main">${view === 'practice' ? practice() : home()}</main>
+    <footer><div><strong>Verse Recall</strong><span>BY MADE BY FAVOR</span></div><p>Joshua 1:8</p><p class="small">Private by design · No account · No tracking</p><div id="save-status" aria-live="polite"></div></footer></div>`;
   applyAppearance();
   renderSaveStatus();
   if (focusTitle) document.querySelector<HTMLElement>('#page-title')?.focus();
@@ -217,7 +228,7 @@ function place(token: number, target?: number): void {
 
 const preferencesDialog = new PreferencesDialog({
   state: () => state,
-  changePreferences: patch => { state = updatePreferences(state, patch); persist(); render(); },
+  changePreferences: patch => { state = choose(state, patch); persist(); render(); },
   applyImport: next => {
     state = next;
     selectedSlot = null;
@@ -261,6 +272,13 @@ app.addEventListener('click', event => {
   if (button.dataset.action === 'retry-save') {
     protectSave = false;
     persist();
+    return;
+  }
+  if (button.dataset.action === 'keep-look' || button.dataset.action === 'restore-look') {
+    if (button.dataset.action === 'restore-look' && appearanceNotice) state = choose(state, appearanceNotice);
+    appearanceNotice = null;
+    persist();
+    render(true);
     return;
   }
   const p = runPassage();
