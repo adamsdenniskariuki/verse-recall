@@ -1,0 +1,27 @@
+.preferences-dialog { background: var(--cp-surface); color: var(--cp-text); border: 1px solid var(--cp-border-strong); border-radius: 20px; padding: 0; width: min(680px, calc(100% - 32px)); max-width: calc(100% - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; box-shadow: var(--cp-shadow); }
+.preferences-dialog::backdrop { background: var(--cp-overlay); }
+.dialog-heading { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 24px; background: var(--cp-surface); border-bottom: 1px solid var(--cp-border); }
+.dialog-heading h2, .dialog-heading .eyebrow { margin-bottom: 0; }
+.dialog-heading .eyebrow { margin-bottom: 4px; font-size: .6rem; }
+.dialog-content { padding: 24px; }
+.dialog-content h3 { font-size: 1.25rem; }
+.dialog-content details { border-top: 1px solid var(--cp-border); padding: 8px 0; }
+.dialog-content details summary { font-size: 1rem; font-weight: 600; }
+.dialog-content .actions { margin-top: 16px; margin-bottom: 16px; }
+.dialog-content input:not([type="checkbox"]) { font: inherit; display: block; width: 100%; min-width: 0; min-height: 44px; margin-top: 8px; padding: 8px 12px; color: var(--cp-text); background: var(--cp-bg-elevated); border: 1px solid var(--cp-border-strong); border-radius: 12px; }
+.dialog-content input[type="file"] { padding: 12px 4px; font-size: .85rem; }
+.dialog-content label { min-width: 0; }
+.dialog-content .small { margin-top: 12px; }
+.dialog-content select { min-width: 0; }
+.font-preview { font-size: 1.1rem !important; padding: 16px; margin: 12px 0; background: var(--cp-accent-soft); border-radius: 12px; }
+.dialog-message, .dialog-error { margin-top: 16px; padding: 12px; border: 1px solid var(--cp-border-strong); border-radius: 12px; overflow-wrap: anywhere; }
+.dialog-error { border: 2px solid var(--cp-danger); }
+#dialog-message:empty { display: none; }
+#import-preview:not(:empty) { margin-top: 20px; padding: 20px; background: var(--cp-bg-elevated); border: 1px solid var(--cp-accent); border-radius: 12px; overflow-wrap: anywhere; }
+.checkbox-label { display: flex; align-items: center; gap: 12px; min-height: 44px; margin: 12px 0; }
+.checkbox-label input { width: 24px; height: 24px; flex: 0 0 auto; accent-color: var(--cp-accent); }
+.file-label { margin: 20px 0; }
+#bible-preview { margin-top: 20px; overflow-wrap: anywhere; }
+#bible-preview .verse { font-size: 1.2rem; }
+#bible-preview a { display: inline-block; min-height: 44px; }
+#bible-book-search { margin-bottom: 12px; }

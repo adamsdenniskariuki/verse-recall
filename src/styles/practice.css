@@ -1,0 +1,50 @@
+.practice, .results { max-width: 840px; margin: auto; padding: 24px 0 48px; }
+.practice-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.steps { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); padding: 0; margin: 0 0 40px; gap: 8px; }
+.steps li { border-bottom: 2px solid var(--cp-border); padding: 12px 4px; font-size: .85rem; color: var(--cp-text-soft); display: flex; gap: 8px; }
+.steps [aria-current] { border-color: var(--cp-accent); color: var(--cp-accent); font-weight: 700; }
+.steps li span { opacity: .85; }
+.practice-heading h1, .results h1 { font-size: clamp(2rem, 4vw, 3rem); }
+.practice-heading .eyebrow { margin-bottom: 12px; }
+.practice-card { background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 20px; padding: 36px; box-shadow: var(--cp-shadow); }
+.verse { font-size: 1.65rem; line-height: 1.8; white-space: pre-line; margin: 0; font-weight: 400; overflow-wrap: anywhere; }
+.verse-citation { font-size: .85rem; color: var(--cp-text-soft); margin-top: 20px; }
+.feedback { color: var(--cp-accent); font-size: .9rem; margin: 16px 0 0; min-height: 1.5em; }
+.feedback:empty { min-height: 0; margin-top: 0; }
+.practice-note { font-size: .8rem; color: var(--cp-text-soft); margin: 16px 0; }
+.source { border-top: 1px solid var(--cp-border); margin-top: 24px; font-size: .85rem; }
+.source p { margin: 12px 0; }
+.source a { display: inline-block; min-height: 44px; padding-top: 8px; }
+.instruction { font-size: .9rem; color: var(--cp-text-soft); margin-bottom: 24px; }
+.slots { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; line-height: 2; }
+.fixed-word { padding: 4px 0; font-size: 1.2rem; }
+.slot { min-width: 64px; font-size: 1.05rem; padding: 8px 12px; border-style: dashed; background: var(--cp-bg-elevated); }
+.slot-number { font-family: var(--font-ui, inherit); font-size: .7rem; color: var(--cp-text-soft); }
+.slot.selected { border-style: solid; background: var(--cp-accent-soft); }
+.slot.correct { border-color: var(--cp-success); border-style: solid; }
+.slot.incorrect { border-color: var(--cp-danger); border-style: solid; }
+.check-symbol { margin-left: 8px; font-weight: bold; }
+.bank-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 32px; border-top: 1px solid var(--cp-border); padding-top: 16px; }
+.bank-header .eyebrow { margin: 0; }
+.bank-header .text-button { background: var(--cp-surface); border-color: var(--cp-surface); }
+.word-bank { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.word { background: var(--cp-surface-soft); border: 1px solid var(--cp-border-strong); font-size: 1.05rem; }
+.word, .slot { max-width: 100%; overflow-wrap: anywhere; }
+.recall-label { font-size: 1rem; margin-bottom: 8px; }
+.hint-panel { padding: 20px; background: var(--cp-accent-soft); border-left: 3px solid var(--cp-accent); border-radius: 0 12px 12px 0; margin-top: 20px; }
+.hint-verse { font-size: 1.15rem; margin-top: 12px; }
+.results { padding-top: 48px; text-align: center; }
+.result-mark { display: grid; place-items: center; width: 56px; height: 56px; margin: 24px auto; border-radius: 50%; font-size: 1.75rem; background: var(--cp-accent-soft); color: var(--cp-accent); }
+.result-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin: 28px 0; gap: 12px; }
+.result-stats strong { display: block; font-size: 1.35rem; font-weight: 600; }
+.result-stats span { font-size: .75rem; color: var(--cp-text-soft); }
+.comparison, .results .source { text-align: left; }
+.comparison h2 { font-size: 1.1rem; margin-top: 24px; }
+.comparison h2:first-child { margin-top: 0; }
+.comparison .verse { font-size: 1.25rem; }
+.diff { display: flex; flex-wrap: wrap; gap: 6px; line-height: 1.7; }
+.diff span { padding: 4px 8px; border-radius: 8px; }
+.diff-incorrect, .diff-missing, .diff-extra { background: var(--cp-accent-soft); border: 1px solid var(--cp-accent); }
+.diff-correct { background: var(--cp-surface-soft); }
+.review-plan { margin: 28px 0; font-size: .9rem; }
+.results .actions { justify-content: center; }

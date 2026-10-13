@@ -1,6 +1,6 @@
 import { passageKey, personalPassage, type PersonalVerse } from './content';
 import { exactKeys, makePersonal, MAX_JSON_BYTES, MAX_PERSONAL, parseBoundedJson, record, validId, validVerseInput, verifyRevisions, verseFields } from './personal';
-import { validState, type SavedState } from './store';
+import { migratePreferences, validState, type SavedState } from './store';
 import { bibleSelectionKey, prepareOfficialSelections } from './bible-catalog';
 
 export type ImportPayload =
@@ -34,6 +34,7 @@ export async function parseImport(raw: string): Promise<ImportPayload> {
   catch (error) { throw new Error(error instanceof SyntaxError ? 'This is not valid JSON. Nothing has been changed.' : error instanceof Error ? error.message : 'Cannot read this JSON.'); }
   if (!record(value)) throw new Error('Expected a Verse Recall JSON object.');
   if (value.format === 'wordkeep-backup') {
+    migratePreferences(value.state);
     await prepareOfficialSelections(value.state);
     if (!exactKeys(value, ['format', 'version', 'exportedAt', 'state']) || value.version !== 2 ||
         typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt)) ||

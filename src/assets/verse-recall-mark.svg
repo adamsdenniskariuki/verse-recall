@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
-  <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-    <path data-part="book" d="M5 24C12 21 18 22 24 26C30 22 36 21 43 24V42C36 39 30 40 24 44C18 40 12 39 5 42Z"/>
-    <path d="M24 26V44"/>
-    <path data-part="cross" d="M14 27V35M10.5 30.5H17.5"/>
-    <path data-part="thought" d="M31 4H37A6 6 0 0 1 37 16H31A6 6 0 0 1 31 4Z"/>
+  <g stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path data-part="book" d="M4.5 25.5C11.5 22.5 18 23 24 27C30 23 36.5 22.5 43.5 25.5V41.5C36.5 38.8 30 39.4 24 43.5C18 39.4 11.5 38.8 4.5 41.5Z"/>
+    <path d="M24 27V43.5"/>
+    <path data-part="cross" d="M14 28.5V37M10.5 31.8H17.5"/>
+    <path data-part="thought" d="M30 3.5H38.5A6 6 0 0 1 38.5 15.5H34.5L31.5 18V15.5H30A6 6 0 0 1 30 3.5Z"/>
   </g>
   <g fill="currentColor">
-    <circle cx="25" cy="19" r="1.8"/>
-    <circle cx="21" cy="21" r="1.2"/>
+    <circle cx="26.5" cy="20" r="1.7"/>
+    <circle cx="23" cy="22.6" r="1.1"/>
   </g>
 </svg>

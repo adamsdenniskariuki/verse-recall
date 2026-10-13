@@ -84,7 +84,7 @@ test('theme preferences preserve typed recall', async ({ page }) => {
 
 test('responsive layouts and accessible targets', async ({ page }) => {
   await page.goto('./');
-  for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 }, { width: 1440, height: 1000 }]) {
+  for (const viewport of [{ width: 360, height: 800 }, { width: 768, height: 1024 }, { width: 1440, height: 1000 }]) {
     await page.setViewportSize(viewport);
     for (const preset of ['calm', 'study', 'focus']) {
       for (const colour of ['light', 'dark']) {
@@ -105,7 +105,7 @@ test('responsive layouts and accessible targets', async ({ page }) => {
       }
     }
   }
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 360, height: 800 });
   await page.locator(`.verse-card [data-start="${passageKey(passages[1])}"]`).click();
   await page.locator('[data-action="next"]').click();
   await solveBank(page);
@@ -171,12 +171,12 @@ test('preferences dialog focus colour font and responsive sheet', async ({ page 
   seed.run = { ...startRun(passages[0], 'review'), answer: 'A draft to keep' };
   await page.addInitScript(({ key, value }) => { if (!localStorage.getItem(key)) localStorage.setItem(key, value); }, { key: STORAGE_KEY, value: JSON.stringify(seed) });
   await page.goto('./');
-  for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 }, { width: 1440, height: 1000 }]) {
+  for (const viewport of [{ width: 360, height: 800 }, { width: 768, height: 1024 }, { width: 1440, height: 1000 }]) {
     await page.setViewportSize(viewport);
     await preferences(page);
     await expect(page.getByRole('dialog', { name: 'Preferences' })).toBeVisible();
     await expect(page.locator('[data-dialog-action="close"]')).toBeFocused();
-    await page.locator('#colour').selectOption(viewport.width === 1024 ? 'dark' : 'light');
+    await page.locator('#colour').selectOption(viewport.width === 768 ? 'dark' : 'light');
     for (const accent of ['neutral', 'rose']) {
       await page.locator('#accent').selectOption(accent);
       await expect(page.locator('html')).toHaveAttribute('data-accent', accent);
@@ -187,7 +187,7 @@ test('preferences dialog focus colour font and responsive sheet', async ({ page 
       expect(neutral).toBe(accent === 'neutral');
     }
     await page.locator('#accent').selectOption('neutral');
-    for (const font of ['segoe', 'aptos', 'calibri', 'mono']) {
+    for (const font of ['serif', 'readable', 'segoe', 'aptos', 'calibri', 'mono']) {
       await page.locator('#font').selectOption(font);
       await expect(page.locator('html')).toHaveAttribute('data-font', font);
     }
@@ -285,7 +285,7 @@ test('bulk import and private backup transfer round trip', async ({ page, browse
   await page.locator('[data-dialog-action="export"]').click();
   const download = await downloadEvent;
   const bytes = await readFile((await download.path())!);
-  const other = await browser.newContext({ acceptDownloads: true, viewport: { width: 390, height: 844 } });
+  const other = await browser.newContext({ acceptDownloads: true, viewport: { width: 360, height: 800 } });
   try {
     const dest = await other.newPage();
     await dest.goto(page.url());
@@ -325,52 +325,85 @@ test('bulk import and private backup transfer round trip', async ({ page, browse
   } finally { await other.close(); }
 });
 
-test('default font covers the entire app and honors saved choices', async ({ page }) => {
+test('default fonts pair serif scripture with a clean interface and honor saved choices', async ({ page }) => {
   await page.goto('./');
-  await expect(page.locator('html')).toHaveAttribute('data-font', 'mono');
-  const assertFont = async (family: string) => {
-    const fonts = await page.locator('body, h1, h2, h3, p, nav, button, input, select, textarea, dialog, summary, .word, .slot').evaluateAll(nodes =>
-      nodes.filter(node => node.getClientRects().length > 0 && node.checkVisibility()).flatMap(node =>
-        node instanceof HTMLInputElement && node.type === 'file'
-          ? [getComputedStyle(node).fontFamily, getComputedStyle(node, '::file-selector-button').fontFamily]
-          : [getComputedStyle(node).fontFamily]));
-    expect(fonts.length).toBeGreaterThan(5);
-    expect(fonts.every(font => font.includes(family))).toBe(true);
+  await expect(page.locator('html')).toHaveAttribute('data-font', 'serif');
+  const familiesOf = (selector: string) => page.locator(selector).evaluateAll(nodes =>
+    nodes.filter(node => node.getClientRects().length > 0 && node.checkVisibility()).flatMap(node =>
+      node instanceof HTMLInputElement && node.type === 'file'
+        ? [getComputedStyle(node).fontFamily, getComputedStyle(node, '::file-selector-button').fontFamily]
+        : [getComputedStyle(node).fontFamily]));
+  const assertFonts = async (selector: string, family: string) => {
+    const fonts = await familiesOf(selector);
+    expect(fonts.length, selector).toBeGreaterThan(0);
+    expect(fonts.filter(font => !font.includes(family)), `${selector} uses ${family}`).toEqual([]);
   };
-  await assertFont('Consolas');
+  const ui = 'body, nav, nav button, label, input, select, dialog, summary, .primary, .pill';
+  const scripture = 'h1, h2, h3, .verse, .word, .slot, textarea, .font-preview, .hero .lead';
+  const assertDefault = async () => { await assertFonts(ui, 'Segoe UI'); await assertFonts(scripture, 'Georgia'); };
+  const assertAll = async (family: string) => assertFonts(`${ui}, ${scripture}, p, button`, family);
+  await assertDefault();
   await expect(page.locator('.hero .lead')).toHaveText('Joshua 1:8');
   await preferences(page);
   await page.locator('#personal-panel summary').click();
   await page.locator('#transfer-panel summary').click();
-  await assertFont('Consolas');
+  await assertDefault();
   await expect(page.locator('.font-preview')).toHaveText('Joshua 1:8');
+  await page.locator('#font').selectOption('mono');
+  await assertAll('Consolas');
+  await page.locator('#font').selectOption('serif');
   await closePreferences(page);
   await page.locator('.hero [data-start]').click();
-  await assertFont('Consolas');
+  await assertDefault();
   await page.locator('[data-action="next"]').click();
-  await assertFont('Consolas');
+  await assertDefault();
   await preferences(page);
+  await page.locator('#font').selectOption('mono');
+  await assertAll('Consolas');
   await page.locator('#font').selectOption('segoe');
-  await assertFont('Segoe UI');
+  await assertAll('Segoe UI');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-font', 'segoe');
   await expect(page.locator('.steps [aria-current]')).toContainText('Fill');
-  await assertFont('Segoe UI');
+  await assertAll('Segoe UI');
 });
 
+test('refreshed look can be kept or restored for older saves', async ({ page }) => {
+  const state = freshState() as ReturnType<typeof freshState> & { preferences: Record<string, unknown> };
+  delete state.preferences.chosen;
+  state.preferences = { ...state.preferences, accent: 'purple', font: 'mono' };
+  state.run = { ...startRun(passages[0], 'review'), answer: 'Still here' };
+  await page.addInitScript(({ key, value }) => { if (!localStorage.getItem(key)) localStorage.setItem(key, value); }, { key: STORAGE_KEY, value: JSON.stringify(state) });
+  await page.goto('./');
+  await expect(page.locator('html')).toHaveAttribute('data-font', 'serif');
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'teal');
+  const notice = page.locator('.notice');
+  await expect(notice).toContainText('refreshed the look');
+  await page.screenshot({ path: 'verification/refreshed-look-notice.png', fullPage: true });
+  await page.locator('[data-action="restore-look"]').click();
+  await expect(notice).toHaveCount(0);
+  await expect(page.locator('html')).toHaveAttribute('data-font', 'mono');
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'purple');
+  await expect(page.locator('#answer')).toHaveValue('Still here');
+  const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).preferences, STORAGE_KEY);
+  expect(saved).toMatchObject({ accent: 'purple', font: 'mono', chosen: ['accent', 'font'] });
+  await page.reload();
+  await expect(page.locator('.notice')).toHaveCount(0);
+  await expect(page.locator('html')).toHaveAttribute('data-font', 'mono');
+});
 test('accent palettes contrast persist and preserve practice', async ({ page }) => {
   const state = freshState();
   state.run = { ...startRun(passages[0], 'review'), answer: 'Keep this answer', hints: 1, exposed: true };
   await page.addInitScript(({ key, value }) => { if (!localStorage.getItem(key)) localStorage.setItem(key, value); }, { key: STORAGE_KEY, value: JSON.stringify(state) });
   await page.goto('./');
-  await expect(page.locator('html')).toHaveAttribute('data-accent', 'purple');
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'teal');
   const colors: Record<string, [string, string]> = {
-    rose: ['#b11f4b', '#fd8ea1'], neutral: ['#242424', '#dedede'],
+    teal: ['#0f6b66', '#7fd6cc'], amber: ['#8a4b08', '#f0b86a'], rose: ['#b11f4b', '#fd8ea1'], neutral: ['#23211e', '#ece8e1'],
     blue: ['#1d4ed8', '#93c5fd'], green: ['#166534', '#86efac'], purple: ['#6d28d9', '#c4b5fd'],
   };
   const presets = [
-    { name: 'calm', width: 390, height: 844 },
-    { name: 'study', width: 1024, height: 768 },
+    { name: 'calm', width: 360, height: 800 },
+    { name: 'study', width: 768, height: 1024 },
     { name: 'focus', width: 1440, height: 1000 },
   ];
   for (const preset of presets) {
@@ -420,7 +453,7 @@ test('accent palettes contrast persist and preserve practice', async ({ page }) 
         await expect(page.locator('#answer')).toHaveValue('Keep this answer');
       }
     }
-    await page.screenshot({ path: `verification/purple-consolas-${preset.width}.png`, fullPage: true });
+    await page.screenshot({ path: `verification/accents-${preset.width}.png`, fullPage: true });
     await closePreferences(page);
   }
   await page.reload();
@@ -454,10 +487,10 @@ test('focus indicators follow keyboard and pointer input', async ({ page, browse
     expect(css.shadow).toBe('none');
   };
   await page.goto('./');
-  for (const [preset, width, height] of [['calm', 390, 844], ['study', 1024, 768], ['focus', 1440, 1000]] as const) {
+  for (const [preset, width, height] of [['calm', 360, 800], ['study', 768, 1024], ['focus', 1440, 1000]] as const) {
     await page.setViewportSize({ width, height });
     for (const mode of ['light', 'dark']) {
-      for (const accent of ['purple', 'blue', 'green', 'rose', 'neutral']) {
+      for (const accent of ['teal', 'amber', 'purple', 'blue', 'green', 'rose', 'neutral']) {
         await preferences(page);
         await pointerRing(page.locator('[data-dialog-action="close"]'));
         await page.locator('#preset').selectOption(preset);
@@ -503,8 +536,8 @@ test('focus indicators follow keyboard and pointer input', async ({ page, browse
   await page.keyboard.type('Keep the caret and typed answer');
   await keyboardRing(page.locator('#answer'));
   await expect(page.locator('#answer')).toHaveValue('Keep the caret and typed answer');
-  await expect(page.locator('footer')).toContainText('Local prototype · Working name · No tracking');
-  const touch = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+  await expect(page.locator('footer')).toContainText('Private by design · No account · No tracking');
+  const touch = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 360, height: 800 } });
   try {
     const phone = await touch.newPage();
     await phone.goto(page.url());
@@ -580,7 +613,7 @@ test('Bible thought logo adapts without changing accessible branding', async ({ 
   await expect(page.getByRole('link', { name: 'Verse Recall home', exact: true })).toBeVisible();
   const previews: { mode: string; background: string; text: string; accent: string }[] = [];
   for (const mode of ['light', 'dark']) {
-    for (const accent of ['blue', 'green', 'rose', 'neutral', 'purple']) {
+    for (const accent of ['amber', 'blue', 'green', 'rose', 'neutral', 'purple', 'teal']) {
       await preferences(page);
       await page.locator('#colour').selectOption(mode);
       await page.locator('#accent').selectOption(accent);
@@ -600,10 +633,10 @@ test('Bible thought logo adapts without changing accessible branding', async ({ 
         node.parentElement!.append(probe); const color = getComputedStyle(probe).color; probe.remove(); return color;
       }, palette.expected);
       expect(palette.color).toBe(expected);
-      if (accent === 'purple') previews.push({ mode, background: palette.background, text: palette.text, accent: palette.color });
+      if (accent === 'teal') previews.push({ mode, background: palette.background, text: palette.text, accent: palette.color });
     }
-    for (const width of [390, 1024, 1440]) {
-      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    for (const width of [360, 768, 1440]) {
+      await page.setViewportSize({ width, height: width === 360 ? 800 : 900 });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       const brand = await page.locator('.brand').boundingBox();
       const button = await page.locator('#open-preferences').boundingBox();
@@ -709,7 +742,7 @@ test('Bible picker adds official OT and NT verses and transfers progress', async
   await page.locator('[data-dialog-action="export"]').click();
   const file = await downloaded;
   const bytes = await readFile((await file.path())!);
-  const nextDevice = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const nextDevice = await browser.newContext({ viewport: { width: 360, height: 800 } });
   try {
     const fresh = await nextDevice.newPage();
     await fresh.goto(page.url());
@@ -743,8 +776,8 @@ test('Bible picker shows loading errors and rejects oversized ranges', async ({ 
   await page.locator('#bible-end').selectOption('2');
   await expect(page.locator('[data-bible-action="add"]')).toBeEnabled();
   await expect(page.locator('#bible-preview h3')).toHaveText('Genesis 1:1–2');
-  for (const width of [390, 1024, 1440]) {
-    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: width === 360 ? 800 : 900 });
     expect(await page.locator('#bible-picker').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
     await page.screenshot({ path: `verification/bible-picker-${width}.png`, fullPage: true });
   }
