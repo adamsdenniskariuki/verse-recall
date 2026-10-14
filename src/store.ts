@@ -1,7 +1,7 @@
 import { createProvider, type Filter, type Translation, type PersonalVerse } from './content';
 import { activeIndices, words, type Progress, type Run } from './engine';
 import { exactKeys, MAX_JSON_BYTES, MAX_PERSONAL, parseBoundedJson, record, safeTree, validPersonal, verifyRevisions } from './personal';
-import { bibleSelectionKey, prepareOfficialSelections, selectedBiblePassages, validBibleSelection, type BibleSelection } from './bible-catalog';
+import { bibleSelectionKey, MAX_OFFICIAL, prepareOfficialSelections, selectedBiblePassages, validBibleSelection, type BibleSelection } from './bible-catalog';
 
 export interface Preferences {
   translation: Translation;
@@ -75,7 +75,7 @@ export function validState(value: unknown): value is SavedState {
       !Array.isArray(value.personal) || value.personal.length > MAX_PERSONAL || !value.personal.every(validPersonal) ||
       new Set(value.personal.map(v => v.id)).size !== value.personal.length ||
       new Set(value.personal.map(v => v.revision)).size !== value.personal.length) return false;
-  if (Object.hasOwn(value, 'official') && (!Array.isArray(value.official) || value.official.length > 100 ||
+  if (Object.hasOwn(value, 'official') && (!Array.isArray(value.official) || value.official.length > MAX_OFFICIAL ||
       !value.official.every(validBibleSelection) || new Set(value.official.map(bibleSelectionKey)).size !== value.official.length ||
       selectedBiblePassages(value.official).length !== value.official.length)) return false;
   const official = Array.isArray(value.official) && value.official.every(validBibleSelection) ? value.official : [];

@@ -499,7 +499,7 @@ test('focus indicators follow keyboard and pointer input', async ({ page, browse
         await closePreferences(page);
         await pointerRing(page.locator('#open-preferences'));
         await page.keyboard.press('Shift+Tab');
-        await keyboardRing(page.locator('[data-nav="library"]'));
+        await keyboardRing(page.locator('[data-nav="progress"]'));
         await page.keyboard.press('Tab');
         await keyboardRing(page.locator('#open-preferences'));
         await page.keyboard.press('Enter');
@@ -784,4 +784,141 @@ test('Bible picker shows loading errors and rejects oversized ranges', async ({ 
   await page.keyboard.press('Escape');
   await expect(page.locator('[data-action="browse-bibles"]')).toBeFocused();
   expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBeNull();
+});
+
+test('memory plans load verified verses on demand and track plan progress', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const bibleRequests: string[] = [];
+  page.on('request', request => { if (request.url().includes('/bibles/')) bibleRequests.push(request.url()); });
+  await page.goto('./');
+  await page.locator('nav [data-nav="plans"]').click();
+  await expect(page.locator('nav [data-nav="plans"]')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('.plan-tile')).toHaveCount(10);
+  expect(bibleRequests).toEqual([]);
+  await page.locator('[data-plan="foundations"]').click();
+  await expect(page.locator('#page-title')).toHaveText('Foundations');
+  await expect(page.locator('.plan-verses li')).toHaveCount(10);
+  await expect(page.locator('.plan-verses li').first()).toContainText('Not yet practised');
+  await page.locator('main .primary').click();
+  await expect(page.locator('.practice-heading')).toContainText('John 3:16');
+  await expect(page.locator('.practice-heading')).toContainText('Official Bible selection');
+  await expect(page.locator('blockquote')).toContainText('only born Son');
+  const text = (await page.locator('blockquote').textContent())!;
+  await page.locator('[data-action="next"]').click();
+  await solveBank(page);
+  await solveBank(page);
+  await page.locator('#answer').fill(text);
+  await page.locator('[data-action="check-recall"]').click();
+  await expect(page.locator('.results .lead')).toHaveText('An exact, unaided recall.');
+  await page.locator('.results [data-nav="today"]').click();
+  await expect(page.locator('.feature-card').filter({ hasText: 'YOUR PLAN' })).toContainText('Foundations');
+  await expect(page.locator('.feature-card [data-plan="foundations"]')).toContainText('Continue with Romans 3:23');
+  await page.locator('nav [data-nav="progress"]').click();
+  await expect(page.locator('.plan-progress [data-plan="foundations"]')).toContainText('1 of 10 kept');
+  await expect(page.locator('.plan-progress [data-plan="psalm-23"]')).toContainText('0 of 4 kept');
+  await page.locator('.plan-progress [data-plan="foundations"]').click();
+  await expect(page.locator('.plan-verses li').first()).toContainText('Kept');
+  await expect(page.locator('main .primary')).toContainText('Continue with Romans 3:23');
+  const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY);
+  expect(saved.official).toHaveLength(1);
+  expect(saved.official[0]).toMatchObject({ translation: 'webbe', book: 'JOH', chapter: 3, start: 16, end: 16 });
+  await page.locator('.plan-verses [data-plan-verse="0"]').click();
+  await expect(page.locator('.practice-heading')).toContainText('John 3:16');
+  expect((await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY)).official).toHaveLength(1);
+  await page.locator('.practice-top [data-nav="today"]').click();
+  await preferences(page);
+  await page.locator('#translation').selectOption('bsb');
+  await closePreferences(page);
+  await page.locator('nav [data-nav="plans"]').click();
+  await page.locator('[data-plan="foundations"]').click();
+  await expect(page.locator('.practice-top .pill')).toHaveText('Berean Standard Bible');
+  await expect(page.locator('.plan-verses li').first()).toContainText('Not yet practised');
+  await page.locator('.practice-top [data-nav="plans"]').click();
+  await expect(page.locator('.plan-tile')).toHaveCount(10);
+  expect(errors).toEqual([]);
+});
+
+test('verse of the day is stable, loads only when opened and reports failures', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-03-01T09:00:00'));
+  const bibleRequests: string[] = [];
+  page.on('request', request => { if (request.url().includes('/bibles/')) bibleRequests.push(request.url()); });
+  await page.route('**/bibles/**/manifest.json', route => route.abort());
+  await page.goto('./');
+  const reference = (await page.locator('#daily-heading').textContent())!;
+  await page.reload();
+  await expect(page.locator('#daily-heading')).toHaveText(reference);
+  expect(bibleRequests).toEqual([]);
+  await page.locator('[data-action="daily"]').click();
+  await expect(page.locator('.daily [role="alert"]')).toContainText(`${reference} could not be opened`);
+  expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBeNull();
+  await page.unroute('**/bibles/**/manifest.json');
+  await page.locator('[data-action="daily"]').click();
+  await expect(page.locator('.practice-heading')).toContainText(reference);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY);
+  expect(saved.official).toHaveLength(1);
+  expect(saved.run.mode).toBe('learn');
+});
+
+test('welcome tour invites new visitors, walks every section and can be replayed', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('.tour.invite')).toBeVisible();
+  await expect(page.locator('main .tour')).toHaveCount(0);
+  await page.locator('[data-action="tour"]').first().click();
+  const views = ['today', 'plans', 'library', 'review', 'progress'];
+  for (const [index, view] of views.entries()) {
+    await expect(page.locator('.tour .eyebrow')).toContainText(`${index + 1} OF ${views.length}`);
+    await expect(page.locator('#tour-title')).toBeFocused();
+    await expect(page.locator(`nav [data-nav="${view}"]`)).toHaveAttribute('aria-current', 'page');
+    if (index < views.length - 1) await page.locator('[data-action="tour-next"]').click();
+  }
+  await page.locator('[data-action="tour-back"]').click();
+  await expect(page.locator('nav [data-nav="review"]')).toHaveAttribute('aria-current', 'page');
+  await page.locator('[data-action="tour-next"]').click();
+  await page.locator('[data-action="tour-end"]').click();
+  await expect(page.locator('.tour')).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('.tour')).toHaveCount(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBeNull();
+  await page.locator('nav [data-nav="progress"]').click();
+  await page.locator('main [data-action="tour"]').click();
+  await expect(page.locator('#tour-title')).toHaveText('Today');
+  await page.locator('[data-action="tour-end"]').click();
+  await expect(page.locator('.tour')).toHaveCount(0);
+
+  const returning = freshState();
+  returning.progress[passageKey(passages[0])] = finish(passages[0], startRun(passages[0], 'learn'), undefined, Date.now() - 86_400_000 * 30);
+  await page.evaluate(() => localStorage.clear());
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), { key: STORAGE_KEY, value: JSON.stringify(returning) });
+  await page.reload();
+  await expect(page.locator('.tour')).toHaveCount(0);
+  await expect(page.locator('nav [data-nav="review"] .count')).toContainText('1');
+  await page.locator('nav [data-nav="review"]').click();
+  await expect(page.locator('main [data-review]')).toHaveCount(1);
+});
+
+test('every section fits phones, tablets and desktops', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('./');
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: width === 360 ? 800 : 1000 });
+    for (const view of ['today', 'plans', 'library', 'review', 'progress']) {
+      await page.locator(`nav [data-nav="${view}"]`).click();
+      await expect(page.locator(`nav [data-nav="${view}"]`)).toHaveAttribute('aria-current', 'page');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      const small = await page.locator('button:visible, select:visible, summary:visible').evaluateAll(nodes =>
+        nodes.filter(node => node.getBoundingClientRect().height < 44).map(node => node.textContent));
+      expect(small).toEqual([]);
+      const nav = await page.locator('nav').boundingBox();
+      const settings = await page.locator('#open-preferences').boundingBox();
+      if (width < 900) expect(nav!.y).toBeGreaterThan(settings!.y + settings!.height - 1);
+      if (view === 'today' || view === 'plans' || view === 'progress') await page.screenshot({ path: `verification/${view}-${width}.png`, fullPage: true });
+    }
+    await page.locator('[data-plan]').first().click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `verification/plan-detail-${width}.png`, fullPage: true });
+  }
+  expect(errors).toEqual([]);
 });

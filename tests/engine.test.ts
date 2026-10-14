@@ -597,3 +597,56 @@ test('concurrent Bible loads share requests and retry failures', async () => {
     assert.equal(requests.get(`/bibles/${BIBLE_SNAPSHOT}/webbe/NUM-3.json`), 2);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('every memory plan verse resolves in both verified editions with manifest names', async () => {
+  const { dailyPool, planProgress, plans, planSelection, planTranslation, planVerseKey, verseOfTheDay } = await import('../src/plans');
+  assert.deepEqual(plans.map(p => p.id), ['foundations', 'psalm-23', 'romans-road', 'beatitudes', 'lords-prayer', 'fruit-of-the-spirit', 'armour-of-god', 'peace', 'promises', 'year']);
+  assert.equal(plans.find(p => p.id === 'year')!.verses.length, 52);
+  assert.equal(new Set(plans.map(p => p.id)).size, plans.length);
+  await withBibleFiles(async () => {
+    const index = await loadBibleManifest();
+    for (const plan of plans) {
+      assert.ok(plan.title && plan.summary && plan.cadence && plan.verses.length > 0, plan.id);
+      assert.equal(new Set(plan.verses.map(v => `${v.book} ${v.chapter}:${v.start}-${v.end}`)).size, plan.verses.length, `${plan.id} has no duplicates`);
+      for (const verse of plan.verses) for (const translation of ['webbe', 'bsb'] as const) {
+        const book = index.translations[translation].books.find(b => b.id === verse.book)!;
+        assert.ok(verse.reference.startsWith(`${book.name} ${verse.chapter}:`), verse.reference);
+        const p = await resolveBibleSelection(planSelection(verse, translation));
+        assert.equal(p.reference, verse.reference);
+        assert.equal(passageKey(p), planVerseKey(verse, translation));
+        assert.ok(p.text.length <= 2000 && p.text.trim().split(/\s+/u).length <= 120, `${verse.reference} fits the exercise limit`);
+      }
+    }
+  });
+  assert.equal(planTranslation('bsb'), 'bsb');
+  assert.equal(planTranslation('webbe'), 'webbe');
+  assert.equal(planTranslation('personal'), 'webbe');
+  assert.equal(planTranslation('web'), 'webbe');
+  const foundations = plans[0];
+  const empty = planProgress(foundations, 'webbe', {});
+  assert.deepEqual(empty, { total: 10, started: 0, kept: 0, next: 0 });
+  const key = planVerseKey(foundations.verses[0], 'webbe');
+  const practised = { [key]: { key, attempts: 1, unaided: 0, streak: 0, due: 0, bankCompleted: false, lastPractised: 0, lastResult: 'assisted' as const } };
+  assert.deepEqual(planProgress(foundations, 'webbe', practised), { total: 10, started: 1, kept: 0, next: 0 });
+  const kept = { [key]: { ...practised[key], unaided: 1, lastResult: 'unaided' as const } };
+  assert.deepEqual(planProgress(foundations, 'webbe', kept), { total: 10, started: 1, kept: 1, next: 1 });
+  assert.deepEqual(planProgress(foundations, 'bsb', kept), { total: 10, started: 0, kept: 0, next: 0 }, 'progress stays per edition');
+  assert.ok(dailyPool.length >= 60);
+  assert.ok(dailyPool.every(v => v.end - v.start < 3));
+  const morning = verseOfTheDay(new Date(2026, 2, 1, 0, 5));
+  assert.equal(verseOfTheDay(new Date(2026, 2, 1, 23, 55)), morning, 'one verse for the whole local day');
+  assert.notEqual(verseOfTheDay(new Date(2026, 2, 2, 9)), morning, 'neighbouring days differ');
+  const year = new Set(Array.from({ length: dailyPool.length }, (_, day) => verseOfTheDay(new Date(2026, 0, 1 + day))));
+  assert.equal(year.size, dailyPool.length, 'the pool is visited fully before repeating');
+});
+
+test('the library accepts up to the official selection limit', async () => {
+  const { MAX_OFFICIAL } = await import('../src/bible-catalog');
+  assert.equal(MAX_OFFICIAL, 300);
+  const state = freshState();
+  state.official = Array.from({ length: MAX_OFFICIAL }, (_, i) => selection('webbe', 'PSA', 119, i % 176 + 1, i % 176 + 1)).map((s, i) => i < 176 ? s : { ...s, translation: 'bsb' as const });
+  assert.equal(new Set(state.official.map(s => `${s.translation}${s.start}`)).size, MAX_OFFICIAL);
+  await withBibleFiles(async () => { for (const s of state.official!) await resolveBibleSelection(s); });
+  assert.ok(validState(state));
+  assert.equal(validState({ ...state, official: [...state.official, selection('webbe', 'PSA', 23, 1)] }), false);
+});

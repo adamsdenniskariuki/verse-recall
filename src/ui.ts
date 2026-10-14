@@ -1,0 +1,37 @@
+import { createProvider, translationName, type Passage } from './content';
+import { selectedBiblePassages } from './bible-catalog';
+import type { AppearanceMigration, SavedState } from './store';
+
+export type View = 'today' | 'plans' | 'library' | 'review' | 'progress' | 'practice';
+export const NAV: readonly { view: Exclude<View, 'practice'>; label: string }[] = [
+  { view: 'today', label: 'Today' }, { view: 'plans', label: 'Plans' }, { view: 'library', label: 'Library' },
+  { view: 'review', label: 'Review' }, { view: 'progress', label: 'Progress' },
+];
+
+/** Mutable UI state shared by the controller and the view templates. */
+export interface Ui {
+  state: SavedState;
+  view: View;
+  selectedSlot: number | null;
+  feedback: string;
+  showBankFeedback: boolean;
+  saveError: string | null;
+  protectSave: boolean;
+  appearanceNotice: AppearanceMigration | null;
+  /** Plan opened on the Plans view, or null for the plan list. */
+  plan: string | null;
+  /** Status for loading Bible text from Today or Plans. */
+  loading: { message: string; error: boolean } | null;
+  /** Current step of the welcome tour, or null when it is closed. */
+  tour: number | null;
+  /** Whether the first-visit tour invitation is still showing. */
+  tourInvite: boolean;
+}
+export const ui = {} as Ui;
+
+export const provider = () => createProvider(ui.state.personal, selectedBiblePassages(ui.state.official));
+export const label = (p: Passage) => `${p.reference} · ${translationName(p)}`;
+export const runPassage = () => ui.state.run ? provider().get(ui.state.run.key) : undefined;
+export const date = (value: number) =>
+  new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(value);
+export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
