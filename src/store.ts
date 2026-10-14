@@ -1,6 +1,7 @@
 import { createProvider, type Filter, type Translation, type PersonalVerse } from './content';
 import { activeIndices, words, type Progress, type Run } from './engine';
 import { exactKeys, MAX_JSON_BYTES, MAX_PERSONAL, parseBoundedJson, record, safeTree, validPersonal, verifyRevisions } from './personal';
+import { MAX_FREEZES, MAX_XP, type Journey } from './journey';
 import { bibleSelectionKey, MAX_OFFICIAL, prepareOfficialSelections, selectedBiblePassages, validBibleSelection, type BibleSelection } from './bible-catalog';
 
 export interface Preferences {
@@ -26,6 +27,8 @@ export interface SavedState {
   preferences: Preferences;
   progress: Record<string, Progress>;
   run: Run | null;
+  /** Streak and XP. Added after version 2 shipped, so it stays optional. */
+  journey?: Journey;
 }
 export interface StoragePort {
   getItem(key: string): string | null;
@@ -69,9 +72,17 @@ const timestamp = (value: unknown): value is number =>
   integer(value) && value <= 8_640_000_000_000_000;
 const oneOf = (value: unknown, values: readonly string[]) => typeof value === 'string' && values.includes(value);
 
+export function validJourney(j: unknown): j is Journey {
+  return record(j) && exactKeys(j, ['xp', 'current', 'best', 'lastDay', 'freezes']) &&
+    integer(j.xp) && j.xp <= MAX_XP && integer(j.current) && integer(j.best) && j.current <= j.best &&
+    integer(j.freezes) && j.freezes <= MAX_FREEZES &&
+    (j.lastDay === null ? j.current === 0 : integer(j.lastDay) && j.lastDay <= 100_000_000);
+}
+
 export function validState(value: unknown): value is SavedState {
   if (!record(value) || value.version !== 2 || !record(value.preferences) || !record(value.progress) ||
-      !safeTree(value) || !exactKeys(value, ['version', 'personal', 'preferences', 'progress', 'run', ...(Object.hasOwn(value, 'official') ? ['official'] : [])]) ||
+      !safeTree(value) || !exactKeys(value, ['version', 'personal', 'preferences', 'progress', 'run', ...(Object.hasOwn(value, 'official') ? ['official'] : []), ...(Object.hasOwn(value, 'journey') ? ['journey'] : [])]) ||
+      (Object.hasOwn(value, 'journey') && !validJourney(value.journey)) ||
       !Array.isArray(value.personal) || value.personal.length > MAX_PERSONAL || !value.personal.every(validPersonal) ||
       new Set(value.personal.map(v => v.id)).size !== value.personal.length ||
       new Set(value.personal.map(v => v.revision)).size !== value.personal.length) return false;
@@ -101,7 +112,8 @@ export function validState(value: unknown): value is SavedState {
   if (!record(r) || typeof r.key !== 'string') return false;
   const passage = provider.get(r.key);
   if (!passage || !oneOf(r.stage, ['read', 'fill', 'arrange', 'recall', 'results']) ||
-      !exactKeys(r, ['key', 'stage', 'mode', 'slots', 'order', 'answer', 'hints', 'checks', 'exposed', 'bankCompleted']) ||
+      !exactKeys(r, ['key', 'stage', 'mode', 'slots', 'order', 'answer', 'hints', 'checks', 'exposed', 'bankCompleted', ...(Object.hasOwn(r, 'letters') ? ['letters'] : [])]) ||
+      (Object.hasOwn(r, 'letters') && (r.letters !== true || !(integer(r.hints) && r.hints > 0))) ||
       !oneOf(r.mode, ['learn', 'review']) || typeof r.answer !== 'string' || r.answer.length > 4000 ||
       !integer(r.hints) || !integer(r.checks) || typeof r.exposed !== 'boolean' ||
       typeof r.bankCompleted !== 'boolean') return false;

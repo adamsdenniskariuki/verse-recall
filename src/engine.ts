@@ -12,6 +12,8 @@ export interface Run {
   checks: number;
   exposed: boolean;
   bankCompleted: boolean;
+  /** First-letter hint shown during recall. Absent in older saves. */
+  letters?: boolean;
 }
 export interface Progress {
   key: string;
@@ -121,6 +123,16 @@ export function hint(p: Passage, run: Run): Run {
   if (oldSlot !== -1) slots[oldSlot] = null;
   slots[index] = index;
   return { ...run, slots, hints: run.hints + 1 };
+}
+
+/** Each word reduced to its first letter or digit, keeping surrounding punctuation. */
+export const firstLetters = (text: string): string =>
+  words(text).map(word => word.replace(/^([^\p{L}\p{N}]*[\p{L}\p{N}])[\p{L}\p{N}'’-]*/u, '$1')).join(' ');
+
+/** Shows first letters during recall. It is recorded as a hint, once. */
+export function letterHint(run: Run): Run {
+  if (run.stage !== 'recall' || run.letters) return run;
+  return { ...run, letters: true, hints: run.hints + 1 };
 }
 
 export function nextStage(p: Passage, run: Run): Run {

@@ -1,0 +1,19 @@
+/* Rhythm, XP, badges, first-letter hints and read-aloud. */
+.xp-line { margin: 12px 0 0; }
+.reward { margin: 24px auto 8px; max-width: 560px; padding: 20px 24px; border: 1px solid var(--cp-border); border-radius: 16px; background: var(--cp-accent-soft); text-align: left; }
+.reward h2 { margin: 0 0 4px; font-family: var(--font-display); font-size: 1.5rem; color: var(--cp-text); }
+.reward p { margin: 6px 0 0; color: var(--cp-text); }
+.badge-earned { display: flex; gap: 10px; align-items: baseline; }
+.badge-earned strong { margin-right: 4px; }
+.badge-mark { color: var(--cp-accent); font-size: 1.1rem; line-height: 1; }
+.badge-grid { list-style: none; padding: 0; margin: 16px 0 32px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.badge { display: flex; gap: 12px; align-items: flex-start; padding: 16px; border: 1px dashed var(--cp-border-strong); border-radius: 14px; color: var(--cp-text-muted); }
+.badge > span:last-child { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.badge strong { color: var(--cp-text); }
+.badge.earned { border-style: solid; border-color: var(--cp-border); background: var(--cp-bg-elevated); box-shadow: var(--cp-shadow); }
+.badge:not(.earned) .badge-mark { color: var(--cp-text-soft); }
+.badge-status { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--cp-text-muted); }
+.badge.earned .badge-status { color: var(--cp-accent); }
+.letters { font-family: var(--font-display); font-size: 1.25rem; letter-spacing: .12em; line-height: 1.8; margin: 8px 0 0; overflow-wrap: anywhere; }
+.listen span { display: inline-block; min-width: 1em; }
+.comparison .listen { margin-top: 12px; }
