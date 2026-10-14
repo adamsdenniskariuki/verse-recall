@@ -650,3 +650,78 @@ test('the library accepts up to the official selection limit', async () => {
   assert.ok(validState(state));
   assert.equal(validState({ ...state, official: [...state.official, selection('webbe', 'PSA', 23, 1)] }), false);
 });
+
+test('streaks, freezes and XP follow local days gently', async () => {
+  const { BADGES, earnedBadges, freshJourney, localDay, MAX_FREEZES, mergeJourney, recordPractice, streakNow, xpFor } = await import('../src/journey');
+  const at = (day: number, hour = 9) => new Date(2026, 0, day, hour).getTime();
+  const result = (lastResult: 'unaided' | 'assisted' | 'practice') =>
+    ({ key: 'k', attempts: 1, unaided: lastResult === 'unaided' ? 1 : 0, streak: 0, bankCompleted: false, lastResult, lastPractised: 0, due: 0 });
+  assert.deepEqual([xpFor(result('practice')), xpFor(result('assisted')), xpFor(result('unaided'))], [10, 15, 25]);
+  let step = recordPractice(undefined, result('practice'), at(1));
+  assert.deepEqual(step.journey, { xp: 10, current: 1, best: 1, lastDay: localDay(at(1)), freezes: 0 });
+  assert.deepEqual(step.reward, { xp: 10, streak: 1, frozen: 0, earnedFreeze: false });
+  step = recordPractice(step.journey, result('unaided'), at(1, 23));
+  assert.equal(step.journey.current, 1, 'a second practice on the same day keeps the count');
+  assert.equal(step.journey.xp, 35);
+  for (let day = 2; day <= 7; day++) step = recordPractice(step.journey, result('assisted'), at(day));
+  assert.equal(step.journey.current, 7);
+  assert.equal(step.reward.earnedFreeze, true, 'seven days earn a freeze');
+  assert.equal(step.journey.freezes, 1);
+  assert.equal(streakNow(step.journey, at(9)), 7, 'a freeze holds one quiet day');
+  assert.equal(streakNow(step.journey, at(10)), 0, 'two quiet days need two freezes');
+  assert.equal(streakNow(undefined, at(1)), 0);
+  step = recordPractice(step.journey, result('practice'), at(9));
+  assert.deepEqual([step.journey.current, step.journey.freezes, step.reward.frozen], [8, 0, 1]);
+  step = recordPractice(step.journey, result('practice'), at(12));
+  assert.deepEqual([step.journey.current, step.journey.best, step.reward.frozen], [1, 8, 0], 'an uncovered gap begins again');
+  const lastDay = step.journey.lastDay;
+  step = recordPractice(step.journey, result('practice'), at(5));
+  assert.equal(step.journey.lastDay, lastDay, 'a clock moved backwards does not rewind the rhythm');
+  let long = freshJourney();
+  for (let day = 1; day <= 28; day++) long = recordPractice(long, result('practice'), at(day)).journey;
+  assert.equal(long.freezes, MAX_FREEZES, 'freezes are capped');
+  assert.equal(long.current, 28);
+  const older = { xp: 900, current: 2, best: 30, lastDay: 100, freezes: 1 };
+  const newer = { xp: 40, current: 3, best: 3, lastDay: 120, freezes: 0 };
+  assert.deepEqual(mergeJourney(older, newer), { xp: 900, current: 3, best: 30, lastDay: 120, freezes: 0 });
+  assert.deepEqual(mergeJourney(undefined, newer), newer);
+  assert.equal(mergeJourney(undefined, undefined), undefined);
+  assert.equal(BADGES.length, new Set(BADGES.map(b => b.id)).size);
+  assert.deepEqual(earnedBadges({ progress: {} }), []);
+  const kept = { [passageKey(p)]: { ...result('unaided'), key: passageKey(p) } };
+  assert.deepEqual(earnedBadges({ progress: kept, journey: { ...older, best: 7, xp: 10 } }), ['first-step', 'kept-close', 'three-days', 'seven-days']);
+  assert.ok(earnedBadges({ progress: {}, journey: { ...older, best: 30, xp: 1000 } }).includes('faithful'));
+});
+
+test('journey and first-letter hints validate, save and travel in backups', async () => {
+  const { firstLetters, letterHint } = await import('../src/engine');
+  assert.equal(firstLetters('For God so loved the world, that he gave'), 'F G s l t w, t h g');
+  assert.equal(firstLetters('“Don’t be afraid; 2 sparrows!'), '“D b a; 2 s!');
+  const read = startRun(p);
+  assert.equal(letterHint(read), read, 'letters only help during recall');
+  const recall = letterHint(startRun(p, 'review'));
+  assert.deepEqual([recall.letters, recall.hints], [true, 1]);
+  assert.equal(letterHint(recall), recall, 'showing letters is counted once');
+  assert.equal(finish(p, { ...recall, answer: p.text }, undefined, 0).lastResult, 'assisted');
+  const state = freshState();
+  state.run = recall;
+  assert.equal(validState(state), true);
+  assert.equal(validState({ ...state, run: { ...recall, hints: 0 } }), false);
+  assert.equal(validState({ ...state, run: { ...recall, letters: false } }), false);
+  const journey = { xp: 120, current: 3, best: 5, lastDay: 20_500, freezes: 1 };
+  assert.equal(validState({ ...state, journey }), true);
+  for (const bad of [{ ...journey, current: 6 }, { ...journey, freezes: 3 }, { ...journey, lastDay: null }, { ...journey, xp: -1 }, { ...journey, extra: 1 }, null]) {
+    assert.equal(validState({ ...state, journey: bad }), false, JSON.stringify(bad));
+  }
+  assert.equal(validState({ ...freshState(), journey: { xp: 0, current: 0, best: 0, lastDay: null, freezes: 0 } }), true);
+  const store = memory();
+  const saved = { ...state, journey };
+  assert.equal(saveState(store, saved), null);
+  assert.deepEqual((await loadState(store)).state, saved);
+  const raw = exportBackup(saved, new Date('2026-09-21T00:00:00Z'));
+  const incoming = await parseImport(raw);
+  assert.deepEqual(planImport(freshState(), incoming).next.journey, journey);
+  const local = { ...freshState(), journey: { xp: 400, current: 1, best: 9, lastDay: 20_400, freezes: 0 } };
+  assert.deepEqual(planImport(local, incoming).next.journey, { ...journey, xp: 400, best: 9 });
+  assert.equal(Object.hasOwn(planImport(freshState(), await parseImport(exportBackup(freshState()))).next, 'journey'), false);
+});

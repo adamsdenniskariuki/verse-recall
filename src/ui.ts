@@ -1,6 +1,7 @@
 import { createProvider, translationName, type Passage } from './content';
 import { selectedBiblePassages } from './bible-catalog';
 import type { AppearanceMigration, SavedState } from './store';
+import type { Reward } from './journey';
 
 export type View = 'today' | 'plans' | 'library' | 'review' | 'progress' | 'practice';
 export const NAV: readonly { view: Exclude<View, 'practice'>; label: string }[] = [
@@ -26,6 +27,8 @@ export interface Ui {
   tour: number | null;
   /** Whether the first-visit tour invitation is still showing. */
   tourInvite: boolean;
+  /** What the last finished practice earned, shown once on its results. */
+  reward: (Reward & { key: string }) | null;
 }
 export const ui = {} as Ui;
 

@@ -3,6 +3,7 @@ import { words } from '../engine';
 import { escapeHtml as e } from '../html';
 import { planProgress, plans, planTranslation, verseOfTheDay } from '../plans';
 import { dueReviews } from '../store';
+import { BADGES, earnedBadges, streakNow } from '../journey';
 import { date, label, plural, provider, runPassage, ui } from '../ui';
 
 const day = (value: Date) => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(value);
@@ -82,7 +83,7 @@ export const meter = (kept: number, total: number) =>
 export function today(): string {
   const list = provider().list(ui.state.preferences.translation, ui.state.preferences.filter);
   const due = dueReviews(ui.state, Date.now());
-  const learned = Object.values(ui.state.progress).reduce((sum, item) => sum + item.unaided, 0);
+  const streak = streakNow(ui.state.journey, Date.now());
   const resume = ui.state.run && ui.state.run.stage !== 'results' ? runPassage() : undefined;
   return `<section class="hero">
       <div><p class="eyebrow">A LITTLE EACH DAY. A WORD FOR LIFE.</p><h1 id="page-title" tabindex="-1">Make room for<br> the Word.</h1>
@@ -91,7 +92,8 @@ export function today(): string {
       ${resume ? `<button class="primary" data-nav="practice">Continue ${e(resume.reference)} <span aria-hidden="true">→</span></button>`
         : list[0] ? `<button class="primary" data-start="${e(passageKey(list[0]))}">Begin with ${e(list[0].reference)} <span aria-hidden="true">→</span></button>`
         : '<button class="primary" data-action="add-personal">Add your first passage →</button>'}</div>
-      <aside class="rhythm" aria-label="Your practice rhythm"><span class="eyebrow">YOUR PRACTICE, NOT A RACE</span><div class="stat-row"><div><strong>${learned}</strong><span>unaided recalls</span></div><div><strong>${due.length}</strong><span>reviews ready</span></div></div>
+      <aside class="rhythm" aria-label="Your practice rhythm"><span class="eyebrow">YOUR PRACTICE, NOT A RACE</span><div class="stat-row"><div><strong>${streak}</strong><span>${streak === 1 ? 'day' : 'days'} in a row</span></div><div><strong>${due.length}</strong><span>reviews ready</span></div></div>
+      <p class="small xp-line">${ui.state.journey?.xp ?? 0} XP · ${plural(ui.state.journey?.freezes ?? 0, 'streak freeze')} saved</p>
       <div class="rhythm-line"></div><p>Small moments.<br>Lasting words.</p><span class="small">Inspired by Joshua 1:8</span></aside>
     </section>
     <div class="feature-grid">${daily()}${currentPlan()}</div>
@@ -113,6 +115,24 @@ export function review(): string {
     ${schedule()}`;
 }
 
+function journey(): string {
+  const j = ui.state.journey;
+  const streak = streakNow(j, Date.now());
+  const earned = earnedBadges(ui.state);
+  return `<section aria-labelledby="rhythm-heading"><div class="section-heading"><h2 id="rhythm-heading">Your rhythm</h2><span class="small">A streak freeze covers a day you need to rest. One is earned every seven days; you can hold two.</span></div>
+    <div class="stat-grid" aria-label="Rhythm summary">
+      <div><strong>${streak}</strong><span>${streak === 1 ? 'day' : 'days'} in a row</span></div>
+      <div><strong>${j?.best ?? 0}</strong><span>longest rhythm</span></div>
+      <div><strong>${j?.xp ?? 0}</strong><span>XP gathered</span></div>
+      <div><strong>${j?.freezes ?? 0}</strong><span>streak freezes saved</span></div>
+    </div></section>
+    <section aria-labelledby="badges-heading"><div class="section-heading"><h2 id="badges-heading">Badges</h2><span class="pill">${earned.length} of ${BADGES.length}</span></div>
+    <ul class="badge-grid">${BADGES.map(b => {
+      const has = earned.includes(b.id);
+      return `<li class="badge ${has ? 'earned' : ''}"><span class="badge-mark" aria-hidden="true">${has ? '✦' : '○'}</span><span><strong>${e(b.title)}</strong><span class="small">${e(b.text)}</span><span class="badge-status">${has ? 'Earned' : 'Not yet'}</span></span></li>`;
+    }).join('')}</ul></section>`;
+}
+
 export function progress(): string {
   const all = Object.values(ui.state.progress);
   const learned = all.reduce((sum, item) => sum + item.unaided, 0);
@@ -125,6 +145,7 @@ export function progress(): string {
       <div><strong>${learned}</strong><span>unaided recalls</span></div>
       <div><strong>${dueReviews(ui.state, Date.now()).length}</strong><span>reviews ready</span></div>
     </section>
+    ${journey()}
     <section aria-labelledby="plan-progress-heading"><div class="section-heading"><h2 id="plan-progress-heading">Plans</h2><span class="pill">${e(translation === 'bsb' ? 'Berean Standard Bible' : 'WEB British')}</span></div>
       <div class="plan-progress">${plans.map(plan => {
         const p = planProgress(plan, translation, ui.state.progress);

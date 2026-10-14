@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { passages, passageKey, personalPassage } from '../src/content';
 import { freshState, STORAGE_KEY } from '../src/store';
-import { finish, startRun } from '../src/engine';
+import { finish, firstLetters, startRun } from '../src/engine';
+import { localDay } from '../src/journey';
 import { makePersonal } from '../src/personal';
 import { readFile } from 'node:fs/promises';
 
@@ -921,4 +922,90 @@ test('every section fits phones, tablets and desktops', async ({ page }) => {
     await page.screenshot({ path: `verification/plan-detail-${width}.png`, fullPage: true });
   }
   expect(errors).toEqual([]);
+});
+
+test('streaks, freezes, XP and badges celebrate practice gently', async ({ page }) => {
+  const seed = freshState();
+  seed.run = startRun(passages[0], 'review');
+  seed.journey = { xp: 100, current: 6, best: 6, lastDay: localDay(Date.now()) - 2, freezes: 1 };
+  await page.addInitScript(({ key, value }) => { if (!localStorage.getItem(key)) localStorage.setItem(key, value); }, { key: STORAGE_KEY, value: JSON.stringify(seed) });
+  await page.goto('./');
+  await page.locator('#answer').fill(passages[0].text);
+  await page.locator('[data-action="check-recall"]').click();
+  const reward = page.locator('.reward');
+  await expect(reward.locator('h2')).toHaveText('+25 XP');
+  await expect(reward).toContainText('Day 7 of your rhythm.');
+  await expect(reward).toContainText('A streak freeze kept your rhythm through 1 quiet day.');
+  await expect(reward).toContainText('You earned a streak freeze');
+  await expect(reward.locator('.badge-earned strong')).toHaveText(['New badge: First step', 'New badge: Kept close', 'New badge: A week of days']);
+  const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY);
+  expect(saved.journey).toEqual({ xp: 125, current: 7, best: 7, lastDay: localDay(Date.now()), freezes: 1 });
+  await page.locator('.results [data-nav="today"]').click();
+  await expect(page.locator('.rhythm .stat-row div').first()).toHaveText(/7\s*days in a row/u);
+  await expect(page.locator('.xp-line')).toHaveText('125 XP · 1 streak freeze saved');
+  await page.locator('[data-nav="progress"]').click();
+  await expect(page.locator('[aria-label="Rhythm summary"]')).toContainText('125');
+  await expect(page.locator('.badge.earned')).toHaveCount(4);
+  await expect(page.locator('.badge:not(.earned)').first()).toContainText('Not yet');
+  await page.reload();
+  await page.locator('[data-nav="progress"]').click();
+  await expect(page.locator('.badge.earned')).toHaveCount(4);
+});
+
+test('first-letter hints and optional read-aloud', async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as Record<string, unknown> & { spoken: unknown[]; cancelled: number; current: { onend?: (() => void) | null } | null };
+    w.spoken = [];
+    w.cancelled = 0;
+    w.current = null;
+    class Utterance { lang = ''; rate = 1; voice: unknown = null; onend: (() => void) | null = null; onerror: (() => void) | null = null; constructor(public text: string) {} }
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: Utterance, configurable: true });
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
+      speak: (u: Utterance) => { w.spoken.push({ text: u.text, lang: u.lang, rate: u.rate, voice: (u.voice as { name?: string } | null)?.name }); w.current = u; },
+      cancel: () => { w.cancelled++; },
+      getVoices: () => [{ lang: 'en-US', name: 'US' }, { lang: 'en-GB', name: 'British' }],
+    } });
+  });
+  const seed = freshState();
+  seed.run = startRun(passages[0]);
+  await page.addInitScript(({ key, value }) => { if (!localStorage.getItem(key)) localStorage.setItem(key, value); }, { key: STORAGE_KEY, value: JSON.stringify(seed) });
+  await page.goto('./');
+  const listen = page.locator('[data-action="listen"]');
+  await expect(listen).toHaveText(/Listen/u);
+  await listen.click();
+  await expect(listen).toHaveAttribute('aria-pressed', 'true');
+  await expect(listen).toHaveText(/Stop reading/u);
+  await expect(listen).toBeFocused();
+  expect(await page.evaluate(() => (window as unknown as { spoken: unknown[] }).spoken)).toEqual([{ text: `${passages[0].reference}. ${passages[0].text}`, lang: 'en-GB', rate: 0.9, voice: 'British' }]);
+  await page.evaluate(() => (window as unknown as { current: { onend: () => void } }).current.onend());
+  await expect(listen).toHaveText(/Listen/u);
+  await expect(listen).toHaveAttribute('aria-pressed', 'false');
+  await listen.click();
+  const before = await page.evaluate(() => (window as unknown as { cancelled: number }).cancelled);
+  await page.locator('[data-action="next"]').click();
+  expect(await page.evaluate(() => (window as unknown as { cancelled: number }).cancelled)).toBeGreaterThan(before);
+  await solveBank(page);
+  await solveBank(page);
+  await expect(page.locator('.letters')).toHaveCount(0);
+  await page.locator('[data-action="letters"]').click();
+  await expect(page.locator('.letters')).toHaveText(firstLetters(passages[0].text));
+  await expect(page.locator('#feedback')).toHaveText('First letters shown. This session will not count as unaided recall.');
+  await expect(page.locator('[data-action="letters"]')).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('.letters')).toHaveText(firstLetters(passages[0].text));
+  await page.locator('#answer').fill(passages[0].text);
+  await page.locator('[data-action="check-recall"]').click();
+  await expect(page.locator('.results .lead')).toHaveText('Exact recall with help — not unaided mastery.');
+  await expect(page.locator('.result-stats')).toContainText('1hints used');
+  await expect(page.locator('.results [data-action="listen"]')).toBeVisible();
+});
+
+test('read-aloud stays hidden when the browser cannot speak', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(window, 'speechSynthesis', { value: undefined, configurable: true }));
+  const seed = freshState();
+  seed.run = startRun(passages[0]);
+  await page.addInitScript(({ key, value }) => { if (!localStorage.getItem(key)) localStorage.setItem(key, value); }, { key: STORAGE_KEY, value: JSON.stringify(seed) });
+  await page.goto('./');
+  await expect(page.locator('blockquote')).toHaveText(passages[0].text);
+  await expect(page.locator('[data-action="listen"]')).toHaveCount(0);
 });

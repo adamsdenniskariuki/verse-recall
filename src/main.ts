@@ -1,6 +1,6 @@
 import './styles/index.css';
 import { collectionName } from './content';
-import { activeIndices, bankCorrect, finish, hint, nextStage, normalizeWord, placeToken, startRun, type Run } from './engine';
+import { activeIndices, bankCorrect, finish, hint, letterHint, nextStage, normalizeWord, placeToken, startRun, type Run } from './engine';
 import { choose, LEGACY_STORAGE_KEY, loadState, saveState, STORAGE_KEY, type StoragePort } from './store';
 import { escapeHtml as e } from './html';
 import { PreferencesDialog } from './preferences';
@@ -11,7 +11,9 @@ import { planSelection, plans, planTranslation, verseOfTheDay } from './plans';
 import { provider, runPassage, ui, type View } from './ui';
 import { library, progress, review, today } from './views/home';
 import { plansView } from './views/plans';
-import { practice } from './views/practice';
+import { listenLabel, practice } from './views/practice';
+import { earnedBadges, recordPractice } from './journey';
+import { speak, speaking, stopSpeaking } from './speech';
 import { footer, header, notice, tour, TOUR } from './views/shell';
 
 installTheme();
@@ -38,6 +40,7 @@ Object.assign(ui, {
   plan: null,
   loading: null,
   tour: null,
+  reward: null,
   tourInvite: !tourSeen && !loaded.state.run && Object.keys(loaded.state.progress).length === 0,
 });
 const media = matchMedia('(prefers-color-scheme: dark)');
@@ -94,6 +97,7 @@ function render(focus: 'title' | 'tour' | false = false): void {
   app.innerHTML = `<div class="shell">${header()}<div id="save-warning"></div>${notice()}${tour()}<main id="main">${main}</main>${footer()}</div>`;
   applyAppearance();
   renderSaveStatus();
+  if (speaking() && !document.querySelector('[data-action="listen"]')) stopSpeaking();
   if (focus) document.querySelector<HTMLElement>(focus === 'tour' ? '#tour-title' : '#page-title')?.focus();
 }
 function go(view: View): void {
@@ -113,6 +117,7 @@ function start(key: string, mode: Run['mode']): void {
   ui.selectedSlot = null;
   ui.feedback = '';
   ui.showBankFeedback = false;
+  ui.reward = null;
   persist();
   render('title');
 }
@@ -164,6 +169,12 @@ function place(token: number, target?: number): void {
   persist();
   render();
   (document.querySelector<HTMLElement>('.word') ?? document.querySelector<HTMLElement>('[data-action="check-bank"]'))?.focus();
+}
+function refreshListen(): void {
+  for (const button of document.querySelectorAll<HTMLElement>('[data-action="listen"]')) {
+    button.setAttribute('aria-pressed', String(speaking()));
+    button.innerHTML = listenLabel();
+  }
 }
 function setTour(step: number | null): void {
   ui.tourInvite = false;
@@ -252,6 +263,12 @@ app.addEventListener('click', event => {
   const p = runPassage();
   const run = ui.state.run;
   if (!p || !run) return;
+  if (action === 'listen') {
+    if (speaking()) stopSpeaking();
+    else speak(`${p.reference}. ${p.text}`, refreshListen);
+    refreshListen();
+    return;
+  }
   if (button.dataset.token !== undefined) return place(Number(button.dataset.token));
   if (button.dataset.slot !== undefined) {
     const index = Number(button.dataset.slot);
@@ -293,12 +310,24 @@ app.addEventListener('click', event => {
       ui.feedback = 'Hint recorded. This session will not count as unaided recall.';
       ui.showBankFeedback = false;
       break;
+    case 'letters':
+      ui.state.run = letterHint(run);
+      ui.feedback = 'First letters shown. This session will not count as unaided recall.';
+      break;
     case 'check-recall':
       if (!normalizeWord(run.answer.trim())) {
         ui.feedback = 'Write a word you remember, or use a hint to get started.';
         break;
       }
-      ui.state.progress[run.key] = finish(p, run, ui.state.progress[run.key], Date.now());
+      {
+        const now = Date.now();
+        const before = earnedBadges(ui.state);
+        const result = finish(p, run, ui.state.progress[run.key], now);
+        ui.state.progress[run.key] = result;
+        const recorded = recordPractice(ui.state.journey, result, now);
+        ui.state.journey = recorded.journey;
+        ui.reward = { ...recorded.reward, key: run.key, badges: earnedBadges(ui.state).filter(id => !before.includes(id)) };
+      }
       run.stage = 'results';
       run.checks++;
       stageChanged = true;
