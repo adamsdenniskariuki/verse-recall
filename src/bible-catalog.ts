@@ -3,6 +3,8 @@ import type { Passage, Testament } from './content';
 import { exactKeys, record } from './personal';
 
 export type BibleTranslation = 'webbe' | 'bsb';
+/** Room for every memory plan in both editions plus personal picks. */
+export const MAX_OFFICIAL = 300;
 export interface BibleSelection {
   snapshot: string;
   translation: BibleTranslation;
@@ -137,7 +139,7 @@ export async function resolveBibleSelection(value: unknown): Promise<Passage> {
 
 export async function prepareOfficialSelections(state: unknown): Promise<void> {
   if (!record(state) || !Object.hasOwn(state, 'official')) return;
-  if (!Array.isArray(state.official) || state.official.length > 100 ||
+  if (!Array.isArray(state.official) || state.official.length > MAX_OFFICIAL ||
       !state.official.every(validBibleSelection) ||
       new Set(state.official.map(bibleSelectionKey)).size !== state.official.length) {
     throw new Error('Invalid official Bible selections. Nothing was imported.');
