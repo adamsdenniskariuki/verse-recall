@@ -32,3 +32,37 @@ test('Pages production assets and navigation use the custom-domain root', async 
   expect((await cname.text()).trim()).toBe('verserecall.madebyfavor.com');
   expect(errors).toEqual([]);
 });
+
+test.describe('installable offline app', () => {
+  test.use({ serviceWorkers: 'allow' });
+
+  test('installs, works offline and keeps opened Bible chapters', async ({ page, context, request }) => {
+    const manifest = await (await request.get('/manifest.webmanifest')).json();
+    expect(manifest).toMatchObject({ short_name: 'Verse Recall', start_url: '/', scope: '/', display: 'standalone' });
+    for (const size of ['192x192', '512x512']) {
+      const icon = manifest.icons.find((item: { sizes: string; type: string }) => item.sizes === size && item.type === 'image/png');
+      expect((await request.get(icon.src)).ok()).toBe(true);
+    }
+    const worker = await request.get('/sw.js');
+    expect(worker.ok()).toBe(true);
+    expect(await worker.text()).not.toMatch(/__(VERSION|SHELL|SNAPSHOT)__/);
+
+    await page.goto('./');
+    await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+    await page.reload();
+    expect(await page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+    const reference = (await page.locator('#daily-heading').textContent())!;
+    await page.locator('[data-action="daily"]').click();
+    await expect(page.locator('.practice-heading')).toContainText(reference);
+    const text = (await page.locator('blockquote.verse').textContent())!.trim();
+    expect(text.length).toBeGreaterThan(10);
+
+    await context.setOffline(true);
+    await page.reload().catch(() => undefined);
+    await expect(page.locator('.practice-heading')).toContainText(reference);
+    await expect(page.locator('blockquote.verse')).toHaveText(text);
+    await page.locator('[data-nav="library"]').click();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await context.setOffline(false);
+  });
+});

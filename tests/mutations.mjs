@@ -122,6 +122,14 @@ const cases = [
     `if (speaking() && !document.querySelector('[data-action="listen"]')) stopSpeaking();`, 'if (false) stopSpeaking();', 'browser'],
   ['read-aloud stays hidden when the browser cannot speak', 'src/speech.ts',
     "typeof window.speechSynthesis?.speak === 'function'", "'speechSynthesis' in window", 'browser'],
+  ['installs, works offline and keeps opened Bible chapters', 'tools/service-worker.js',
+    'return event.respondWith(cacheFirst(request, BIBLE_CACHE));', 'return;', 'pages'],
+  ['installs, works offline and keeps opened Bible chapters', 'tools/service-worker.js',
+    "return (await cache.match('/')) ?? Response.error();", 'return Response.error();', 'pages'],
+  ['installs, works offline and keeps opened Bible chapters', 'vite.config.ts',
+    ".filter(file => file.startsWith('assets/'))", '.filter(() => false)', 'pages'],
+  ['installs, works offline and keeps opened Bible chapters', 'public/manifest.webmanifest',
+    '"display": "standalone"', '"display": "browser"', 'pages'],
 ];
 await mkdir('verification', { recursive: true });
 const report = [];
