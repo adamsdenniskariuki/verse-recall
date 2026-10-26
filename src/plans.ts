@@ -1,5 +1,4 @@
-import { bibleSelectionKey, type BibleSelection, type BibleTranslation } from './bible-catalog';
-import { BIBLE_SNAPSHOT } from './bible-version';
+import { bibleSelectionKey, snapshotFor, type BibleSelection, type BibleTranslation } from './bible-catalog';
 import type { Progress } from './engine';
 
 export interface PlanVerse { book: string; chapter: number; start: number; end: number; reference: string }
@@ -67,10 +66,10 @@ export const plans: readonly Plan[] = [
 ];
 
 export const planSelection = (v: PlanVerse, translation: BibleTranslation): BibleSelection =>
-  ({ snapshot: BIBLE_SNAPSHOT, translation, book: v.book, chapter: v.chapter, start: v.start, end: v.end });
+  ({ snapshot: snapshotFor(translation), translation, book: v.book, chapter: v.chapter, start: v.start, end: v.end });
 export const planVerseKey = (v: PlanVerse, translation: BibleTranslation) => bibleSelectionKey(planSelection(v, translation));
 /** Plans use the chosen Bible; a personal collection falls back to WEB British. */
-export const planTranslation = (translation: string): BibleTranslation => translation === 'bsb' ? 'bsb' : 'webbe';
+export const planTranslation = (translation: string): BibleTranslation => translation === 'bsb' || translation === 'kjv' ? translation : 'webbe';
 
 export interface PlanProgress { total: number; started: number; kept: number; next: number | null }
 /** Started means practised at least once; kept means recalled exactly without help at least once. */

@@ -9,8 +9,8 @@ import { confirmImport, exportBackup, parseImport, planImport } from '../src/tra
 import { createHash } from 'node:crypto';
 import { ACCENTS, choose, FONTS, type SavedState } from '../src/store';
 import { accentTokens, base, contrast, over, themeCss } from '../src/theme';
-import { BIBLE_MANIFEST_SHA256, BIBLE_SNAPSHOT } from '../src/bible-version';
-import { loadBibleManifest, resolveBibleSelection, selectedBiblePassages, type BibleSelection } from '../src/bible-catalog';
+import { BIBLE_MANIFEST_SHA256, BIBLE_SNAPSHOT, KJV_MANIFEST_SHA256, KJV_SNAPSHOT } from '../src/bible-version';
+import { BIBLE_TRANSLATIONS, loadBibleEdition, loadBibleManifest, resolveBibleSelection, selectedBiblePassages, snapshotFor, validBibleSelection, type BibleSelection, type BibleTranslation } from '../src/bible-catalog';
 
 const p = passages[0];
 const memory = (): StoragePort & { data: Map<string, string> } => {
@@ -20,10 +20,11 @@ const memory = (): StoragePort & { data: Map<string, string> } => {
 
 test('official source fidelity', () => {
   const receipts = JSON.parse(readFileSync(new URL('../sources/official-verses.json', import.meta.url), 'utf8')) as Record<string, { text: string; url: string }>;
-  assert.equal(passages.length, 6);
-  assert.equal(new Set(passages.map(passageKey)).size, 6);
+  assert.equal(passages.length, 9);
+  assert.equal(new Set(passages.map(passageKey)).size, 9);
   assert.equal(new Set(passages.map(p => p.id)).size, 3);
-  for (const passage of passages) {
+  // KJV starters are checked against the shipped KJV chapter files in the catalogue test.
+  for (const passage of passages.filter(p => p.translation !== 'kjv')) {
     assert.equal(passage.text.replace(/\s+/gu, ' '), receipts[passageKey(passage)].text);
     assert.equal(passage.source, receipts[passageKey(passage)].url);
     assert.notEqual(passage.translation, 'personal');
@@ -470,7 +471,7 @@ async function withBibleFiles(action: () => Promise<void>, corruptPath = ''): Pr
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async input => {
     const path = String(input);
-    assert.ok(path.startsWith(`/bibles/${BIBLE_SNAPSHOT}/`), 'only versioned same-origin catalogue requests');
+    assert.ok(path.startsWith(`/bibles/${BIBLE_SNAPSHOT}/`) || path.startsWith(`/bibles/${KJV_SNAPSHOT}/`), 'only versioned same-origin catalogue requests');
     const bytes = readFileSync(new URL(`../public${path}`, import.meta.url));
     if (corruptPath && path.endsWith(corruptPath)) {
       const altered = JSON.parse(bytes.toString());
@@ -481,17 +482,21 @@ async function withBibleFiles(action: () => Promise<void>, corruptPath = ''): Pr
   };
   try { await action(); } finally { globalThis.fetch = originalFetch; }
 }
-const selection = (translation: 'webbe' | 'bsb', book: string, chapter: number, start: number, end = start): BibleSelection =>
-  ({ snapshot: BIBLE_SNAPSHOT, translation, book, chapter, start, end });
+const selection = (translation: BibleTranslation, book: string, chapter: number, start: number, end = start): BibleSelection =>
+  ({ snapshot: snapshotFor(translation), translation, book, chapter, start, end });
 
 test('official catalogue covers both Testaments with exact source words', async () => {
-  const root = new URL(`../public/bibles/${BIBLE_SNAPSHOT}/`, import.meta.url);
-  const bytes = readFileSync(new URL('manifest.json', root));
-  assert.equal(createHash('sha256').update(bytes).digest('hex'), BIBLE_MANIFEST_SHA256);
+  for (const [snapshot, hash] of [[BIBLE_SNAPSHOT, BIBLE_MANIFEST_SHA256], [KJV_SNAPSHOT, KJV_MANIFEST_SHA256]]) {
+    const bytes = readFileSync(new URL(`../public/bibles/${snapshot}/manifest.json`, import.meta.url));
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), hash);
+  }
   await withBibleFiles(async () => {
-    const index = await loadBibleManifest();
-    for (const translation of ['webbe', 'bsb'] as const) {
-      const books = index.translations[translation].books;
+    assert.deepEqual(Object.keys((await loadBibleManifest()).translations), ['webbe', 'bsb'], 'the published v1 snapshot is unchanged');
+    assert.deepEqual(Object.keys((await loadBibleManifest(KJV_SNAPSHOT)).translations), ['kjv']);
+    await assert.rejects(loadBibleManifest('v0-unknown'), /Unsupported Bible edition/);
+    for (const translation of BIBLE_TRANSLATIONS) {
+      const root = new URL(`../public/bibles/${snapshotFor(translation)}/`, import.meta.url);
+      const books = (await loadBibleEdition(translation)).books;
       assert.equal(books.length, 66);
       assert.equal(books.filter(b => b.testament === 'OT').length, 39);
       assert.equal(books.filter(b => b.testament === 'NT').length, 27);
@@ -501,6 +506,7 @@ test('official catalogue covers both Testaments with exact source words', async 
         assert.equal(createHash('sha256').update(raw).digest('hex'), chapter.sha256);
         const body = JSON.parse(raw.toString()) as { verses: Record<string, string> };
         assert.deepEqual(Object.entries(body.verses).filter(([, text]) => text.length > 0).map(([v]) => Number(v)), chapter.verses);
+        if (translation === 'kjv') assert.ok(Object.values(body.verses).every(text => !/[[\]\u00b6]/u.test(text)), `${chapter.path} has no editorial marks`);
       }
     }
     const expectations = [
@@ -508,6 +514,8 @@ test('official catalogue covers both Testaments with exact source words', async 
       ['webbe', 'JOH', 3, 16, 'For God so loved the world, that he gave his only born Son, that whoever believes in him should not perish, but have eternal life.'],
       ['bsb', 'ISA', 40, 31, 'But those who wait upon the LORD will renew their strength; they will mount up with wings like eagles; they will run and not grow weary, they will walk and not faint.'],
       ['bsb', 'JOH', 3, 16, 'For God so loved the world that He gave His one and only Son, that everyone who believes in Him shall not perish but have eternal life.'],
+      ['kjv', 'ISA', 40, 31, 'But they that wait upon the LORD shall renew their strength; they shall mount up with wings as eagles; they shall run, and not be weary; and they shall walk, and not faint.'],
+      ['kjv', 'JOH', 3, 16, 'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.'],
     ] as const;
     for (const [translation, book, chapter, verse, text] of expectations) {
       const p = await resolveBibleSelection(selection(translation, book, chapter, verse));
@@ -516,7 +524,25 @@ test('official catalogue covers both Testaments with exact source words', async 
       assert.equal(p.testament, book === 'ISA' ? 'OT' : 'NT');
       assert.ok(p.catalogue?.sourceSha256);
     }
+    for (const starter of passages.filter(p => p.translation === 'kjv')) {
+      const p = await resolveBibleSelection(selection('kjv', starter.mapping.book, starter.mapping.chapter, starter.mapping.verses[0]));
+      assert.equal(starter.text, p.text, `${starter.reference} KJV starter matches the shipped chapter`);
+      assert.equal(p.mapping.scheme, 'eng-kjv-vpl');
+    }
   });
+});
+
+test('KJV is opt-in and kept apart from the original WEB British/BSB snapshot', () => {
+  assert.equal(freshState().preferences.translation, 'webbe');
+  assert.ok(validBibleSelection(selection('kjv', 'JOH', 3, 16)));
+  assert.equal(validBibleSelection({ ...selection('kjv', 'JOH', 3, 16), snapshot: BIBLE_SNAPSHOT }), false);
+  assert.equal(validBibleSelection({ ...selection('webbe', 'JOH', 3, 16), snapshot: KJV_SNAPSHOT }), false);
+  assert.ok(validBibleSelection({ snapshot: 'v1-f2c898218cdde2ad07b1', translation: 'bsb', book: 'JOH', chapter: 3, start: 16, end: 16 }), 'existing saved selections keep loading');
+  const state = freshState();
+  state.preferences.translation = 'kjv';
+  assert.ok(validState(state));
+  assert.equal(localProvider.list('kjv', 'both').length, 3);
+  assert.equal(validState({ ...state, preferences: { ...state.preferences, translation: 'niv' } }), false);
 });
 
 test('official selections restore and transfer without trusting imported text', async () => {
@@ -604,12 +630,11 @@ test('every memory plan verse resolves in both verified editions with manifest n
   assert.equal(plans.find(p => p.id === 'year')!.verses.length, 52);
   assert.equal(new Set(plans.map(p => p.id)).size, plans.length);
   await withBibleFiles(async () => {
-    const index = await loadBibleManifest();
     for (const plan of plans) {
       assert.ok(plan.title && plan.summary && plan.cadence && plan.verses.length > 0, plan.id);
       assert.equal(new Set(plan.verses.map(v => `${v.book} ${v.chapter}:${v.start}-${v.end}`)).size, plan.verses.length, `${plan.id} has no duplicates`);
-      for (const verse of plan.verses) for (const translation of ['webbe', 'bsb'] as const) {
-        const book = index.translations[translation].books.find(b => b.id === verse.book)!;
+      for (const verse of plan.verses) for (const translation of BIBLE_TRANSLATIONS) {
+        const book = (await loadBibleEdition(translation)).books.find(b => b.id === verse.book)!;
         assert.ok(verse.reference.startsWith(`${book.name} ${verse.chapter}:`), verse.reference);
         const p = await resolveBibleSelection(planSelection(verse, translation));
         assert.equal(p.reference, verse.reference);
@@ -619,6 +644,7 @@ test('every memory plan verse resolves in both verified editions with manifest n
     }
   });
   assert.equal(planTranslation('bsb'), 'bsb');
+  assert.equal(planTranslation('kjv'), 'kjv');
   assert.equal(planTranslation('webbe'), 'webbe');
   assert.equal(planTranslation('personal'), 'webbe');
   assert.equal(planTranslation('web'), 'webbe');

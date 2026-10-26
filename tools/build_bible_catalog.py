@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -42,6 +43,129 @@ def sha(data: bytes) -> str:
 
 def encoded(value: object) -> bytes:
     return (json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def write_edition(out: Path, snapshot: str, translation: str,
+                  chapters: dict[str, dict[int, dict[str, str]]]) -> tuple[list[dict], dict]:
+    books = []
+    counts = {"books": 66, "chapters": 0, "versesWithText": 0, "emptyReferences": []}
+    for i, (code, name, count) in enumerate(BOOKS):
+        if set(chapters[code]) != set(range(1, count + 1)):
+            raise ValueError(f"Incomplete chapter coverage for {translation} {code}")
+        entries = []
+        for number in range(1, count + 1):
+            verses = chapters[code][number]
+            if not verses:
+                raise ValueError(f"Empty chapter: {translation} {code} {number}")
+            body = encoded({"snapshot": snapshot, "translation": translation, "book": code, "chapter": number, "verses": verses})
+            relative = f"{translation}/{code}-{number}.json"
+            target = out / relative
+            target.parent.mkdir(exist_ok=True)
+            target.write_bytes(body)
+            available = [int(v) for v, wording in verses.items() if wording]
+            entries.append({"number": number, "path": relative, "sha256": sha(body), "verses": available})
+            counts["chapters"] += 1
+            counts["versesWithText"] += len(available)
+            counts["emptyReferences"].extend(f"{code} {number}:{v}" for v, wording in verses.items() if not wording)
+        books.append({"id": code, "name": name, "testament": "OT" if i < 39 else "NT", "chapters": entries})
+    return books, counts
+
+
+KJV_URL = "https://ebible.org/Scriptures/eng-kjv_vpl.zip"
+KJV_USFM_URL = "https://ebible.org/Scriptures/eng-kjv_usfm.zip"
+KJV_RIGHTS = "https://www.cambridge.org/gb/universitypress/bibles/about/rights-and-permissions"
+
+
+def clean_kjv(wording: str) -> str:
+    """Drop pilcrow paragraph marks and the brackets that mark translators' supplied words."""
+    return " ".join(wording.replace("\u00b6", " ").replace("[", "").replace("]", "").split())
+
+
+def psalm_titles() -> tuple[dict[int, str], str]:
+    """Psalm superscriptions are \\d headings in the USFM edition; the VPL merges them into verse 1."""
+    usfm_archive = (INPUT / "eng-kjv_usfm.zip").read_bytes()
+    with ZipFile(INPUT / "eng-kjv_usfm.zip") as zipped:
+        usfm = zipped.read("20-PSAeng-kjv.usfm").decode("utf-8-sig")
+    titles = {}
+    for chapter in re.finditer(r"\\c (\d+)\s*\n((?:(?!\\v |\\c ).*\n)*)", usfm):
+        heading = re.search(r"\\d (.*?)(?=\n\\(?:q|p|v|m|b)|\Z)", chapter.group(2), re.S)
+        if heading:
+            plain = re.sub(r"\\\+?[a-z0-9]+\*?", "", re.sub(r"\|[^\\]*", "", heading.group(1)))
+            titles[int(chapter.group(1))] = " ".join(plain.split())
+    return titles, sha(usfm_archive)
+
+
+def build_kjv() -> dict:
+    archive = (INPUT / "eng-kjv_vpl.zip").read_bytes()
+    titles, usfm_sha = psalm_titles()
+    with ZipFile(INPUT / "eng-kjv_vpl.zip") as zipped:
+        text = zipped.read("eng-kjv_vpl.txt")
+        about = zipped.read("eng-kjv_about.htm").decode("utf-8-sig")
+    if "King James Version" not in about or "1769" not in about or "Public Domain" not in about:
+        raise ValueError("The KJV archive does not identify the required edition/rights.")
+    snapshot = "kjv1-" + sha(text)[:20]
+    out = ROOT / "public" / "bibles" / snapshot
+    out.mkdir(parents=True, exist_ok=True)
+    codes = {code for code, _, _ in BOOKS}
+    chapters: dict[str, dict[int, dict[str, str]]] = {code: {} for code in codes}
+    pattern = re.compile(r"^(\S+) (\d+):(\d+) (.*)$")
+    for line in text.decode("utf-8-sig").splitlines():
+        match = pattern.match(line)
+        if not match:
+            raise ValueError(f"Unparsed source line: {line[:100]}")
+        book, chapter, verse, wording = match.groups()
+        if book not in codes:
+            continue  # Apocrypha/Deuterocanon are not part of the shared 66-book canon.
+        rows = chapters[book].setdefault(int(chapter), {})
+        if verse in rows:
+            raise ValueError(f"Duplicate source reference: {line[:80]}")
+        rows[verse] = clean_kjv(wording)
+    for number, title in titles.items():
+        first = chapters["PSA"][number]["1"]
+        if not first.startswith(title + " "):
+            raise ValueError(f"Psalm {number} title does not open verse 1")
+        # Printed KJV editions set the superscription above verse 1, as the USFM \\d marker records.
+        chapters["PSA"][number]["1"] = first[len(title) + 1:]
+    books, counts = write_edition(out, snapshot, "kjv", chapters)
+    manifest = {"version": 1, "snapshot": snapshot, "translations": {"kjv": {
+        "edition": "King James Version 1769 standardised text / " + snapshot,
+        "source": KJV_URL, "sourceSha256": sha(text), "books": books,
+    }}}
+    body = encoded(manifest)
+    (out / "manifest.json").write_bytes(body)
+    return {
+        "snapshot": snapshot, "manifestSha256": sha(body),
+        "sources": {"url": KJV_URL, "archiveSha256": sha(archive), "kjv": sha(text),
+                    "psalmTitlesUrl": KJV_USFM_URL, "psalmTitlesArchiveSha256": usfm_sha},
+        "coverage": counts,
+        "transformations": ("Pilcrow paragraph marks and square brackets around supplied words removed; "
+                            f"{len(titles)} Psalm superscriptions (USFM \\d headings) moved out of verse 1; Apocrypha excluded."),
+        "rights": "Public domain in most countries. In the United Kingdom, rights are vested in the Crown and administered by Cambridge University Press.",
+        "rightsUrl": KJV_RIGHTS,
+    }
+
+
+def write_version(snapshot: str, manifest_sha: str, kjv: dict) -> None:
+    (ROOT / "src" / "bible-version.ts").write_text(
+        f"// Generated by tools/build_bible_catalog.py from the official text-only sources.\n"
+        f"export const BIBLE_SNAPSHOT = '{snapshot}';\n"
+        f"export const BIBLE_MANIFEST_SHA256 = '{manifest_sha}';\n"
+        f"/** The KJV is a separate snapshot so existing WEB British/BSB saves keep their original keys. */\n"
+        f"export const KJV_SNAPSHOT = '{kjv['snapshot']}';\n"
+        f"export const KJV_MANIFEST_SHA256 = '{kjv['manifestSha256']}';\n", encoding="utf-8")
+
+
+def kjv_only() -> None:
+    """Add or refresh the KJV snapshot without touching the published WEB British/BSB snapshot."""
+    receipt_path = ROOT / "sources" / "bible-catalog-receipt.json"
+    report = json.loads(receipt_path.read_text(encoding="utf-8"))
+    published = ROOT / "public" / "bibles" / report["snapshot"] / "manifest.json"
+    if sha(published.read_bytes()) != report["manifestSha256"]:
+        raise ValueError("The published WEB British/BSB snapshot does not match its receipt.")
+    report["kjv"] = build_kjv()
+    write_version(report["snapshot"], report["manifestSha256"], report["kjv"])
+    receipt_path.write_bytes(encoded(report))
+    print(json.dumps(report["kjv"], indent=2))
 
 
 def main() -> None:
@@ -83,27 +207,7 @@ def main() -> None:
             if verse in rows:
                 raise ValueError(f"Duplicate source reference: {line[:80]}")
             rows[verse] = wording.strip()
-        books = []
-        counts = {"books": 66, "chapters": 0, "versesWithText": 0, "emptyReferences": []}
-        for i, (code, name, count) in enumerate(BOOKS):
-            if set(chapters[code]) != set(range(1, count + 1)):
-                raise ValueError(f"Incomplete chapter coverage for {translation} {code}")
-            entries = []
-            for number in range(1, count + 1):
-                verses = chapters[code][number]
-                if not verses:
-                    raise ValueError(f"Empty chapter: {translation} {code} {number}")
-                body = encoded({"snapshot": snapshot, "translation": translation, "book": code, "chapter": number, "verses": verses})
-                relative = f"{translation}/{code}-{number}.json"
-                target = out / relative
-                target.parent.mkdir(exist_ok=True)
-                target.write_bytes(body)
-                available = [int(v) for v, wording in verses.items() if wording]
-                entries.append({"number": number, "path": relative, "sha256": sha(body), "verses": available})
-                counts["chapters"] += 1
-                counts["versesWithText"] += len(available)
-                counts["emptyReferences"].extend(f"{code} {number}:{v}" for v, wording in verses.items() if not wording)
-            books.append({"id": code, "name": name, "testament": "OT" if i < 39 else "NT", "chapters": entries})
+        books, counts = write_edition(out, snapshot, translation, chapters)
         manifest["translations"][translation] = {
             "edition": ("British 2020 stable VPL" if translation == "webbe" else "BSB official text") + " / " + snapshot,
             "source": url, "sourceSha256": digest[translation], "books": books,
@@ -120,10 +224,8 @@ def main() -> None:
             raise ValueError(f"Official receipt mismatch: {key}")
     body = encoded(manifest)
     (out / "manifest.json").write_bytes(body)
-    (ROOT / "src" / "bible-version.ts").write_text(
-        f"// Generated by tools/build_bible_catalog.py from the official text-only sources.\n"
-        f"export const BIBLE_SNAPSHOT = '{snapshot}';\n"
-        f"export const BIBLE_MANIFEST_SHA256 = '{sha(body)}';\n", encoding="utf-8")
+    kjv = build_kjv()
+    write_version(snapshot, sha(body), kjv)
     report = {
         "snapshot": snapshot, "scope": "66 shared Protestant-canon books, 39 OT and 27 NT; no deuterocanonical books",
         "sources": {"webbeArchiveSha256": sha(archive), **digest},
@@ -131,10 +233,13 @@ def main() -> None:
         "webbeRights": "https://ebible.org/eng-webbe/copyright.htm",
         "bsbRights": "https://berean.bible/terms.htm",
         "excluded": "Notes, headings, introductions, formatting, audio and other archive files are not shipped.",
+        "kjv": kjv,
     }
     (ROOT / "sources" / "bible-catalog-receipt.json").write_bytes(encoded(report))
     print(json.dumps(report, indent=2))
 
 
 if __name__ == "__main__":
-    main()
+    # Upstream WEB downloads are revised over time; snapshots are immutable, so `--kjv-only`
+    # adds the KJV snapshot while keeping the published v1 WEB British/BSB files byte-for-byte.
+    kjv_only() if "--kjv-only" in sys.argv else main()

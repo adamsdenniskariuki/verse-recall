@@ -1,3 +1,4 @@
+import { editions } from './content';
 import { escapeHtml as e, options } from './html';
 import { makePersonal, MAX_JSON_BYTES } from './personal';
 import { confirmImport, defaultMergeOptions, exportBackup, parseImport, planImport, verseTemplate, type ImportPayload, type ImportPlan } from './transfer';
@@ -122,7 +123,7 @@ export class PreferencesDialog {
     this.dialog.innerHTML = `<div class="dialog-heading"><div><p class="eyebrow">MAKE YOURSELF AT HOME</p><h2 id="preferences-title">Preferences</h2></div><button type="button" data-dialog-action="close" aria-label="Close preferences">Close ×</button></div>
       <div class="dialog-content"><section aria-labelledby="appearance-heading"><h3 id="appearance-heading">Your reading space</h3>
       <div class="settings-grid">
-        <label>Collection<select id="translation" data-preference>${options(p.translation, [['webbe', 'WEB British'], ['bsb', 'BSB'], ['personal', 'Personal verses']])}</select></label>
+        <label>Collection<select id="translation" data-preference>${options(p.translation, [['webbe', 'WEB British'], ['bsb', 'BSB'], ['kjv', 'KJV (King James)'], ['personal', 'Personal verses']])}</select></label>
         <label>New passages<select id="filter" data-preference>${options(p.filter, [['both', 'Both Testaments'], ['OT', 'Old Testament'], ['NT', 'New Testament']])}</select></label>
         <label>Appearance<select id="preset" data-preference>${options(p.preset, [['calm', 'Calm'], ['study', 'Study'], ['focus', 'Focus']])}</select></label>
         <label>Colour mode<select id="colour" data-preference>${options(p.colour, [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']])}</select></label>
@@ -141,6 +142,10 @@ export class PreferencesDialog {
         </div><label>Original text<textarea id="verse-text" name="text" required maxlength="2000" rows="5" placeholder="Enter the original wording, including punctuation."></textarea></label>
         <p class="small">1–120 words, at most 2,000 characters. Editing text or metadata creates a new content revision and resets only that verse's progress after confirmation.</p>
         <button type="submit" class="primary">Preview verse</button></form>
+      </details>
+      <details id="translations-panel"><summary>About the translations</summary>
+        <p class="small">Only public-domain or CC0 texts are bundled. Your chosen collection never changes on its own; KJV is opt-in.</p>
+        <dl class="translation-list">${Object.values(editions).map(t => `<dt>${e(t.name)} (${e(t.short)})</dt><dd><p class="small">${e(t.description)}</p><p class="small">${e(t.rights)}</p><p class="small"><a href="${e(t.rightsUrl)}" target="_blank" rel="noopener noreferrer">Rights ↗</a></p></dd>`).join('')}</dl>
       </details>
       <details id="transfer-panel"><summary>Import, export & device transfer</summary>
         <p class="small">Export a JSON backup here, move it securely to your other device, then open Verse Recall there and import it below. No cloud sync or upload occurs. Backups contain private text, progress and typed answers; anyone with the file can read them.</p>

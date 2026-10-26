@@ -1,3 +1,4 @@
+import { editions } from '../content';
 import { escapeHtml as e } from '../html';
 import { planProgress, plans, planTranslation, planVerseKey } from '../plans';
 import { ui } from '../ui';
@@ -6,7 +7,7 @@ import { loadStatus, meter } from './home';
 function list(): string {
   const translation = planTranslation(ui.state.preferences.translation);
   return `<header class="page-head"><p class="eyebrow">MEMORY PLANS</p><h1 id="page-title" tabindex="-1">Walk with a plan.</h1>
-    <p class="muted">Curated passages, one at a time, in ${translation === 'bsb' ? 'the Berean Standard Bible' : 'the World English Bible (British Edition)'}. Change the Bible in Settings.</p></header>
+    <p class="muted">Curated passages, one at a time, in the ${e(editions[translation].name)}. Change the Bible in Settings.</p></header>
     <div class="plan-grid">${plans.map(plan => {
       const p = planProgress(plan, translation, ui.state.progress);
       return `<article class="plan-tile" aria-labelledby="plan-${e(plan.id)}"><p class="eyebrow">${e(plan.cadence.toUpperCase())}</p>
@@ -20,7 +21,7 @@ function detail(id: string): string {
   const translation = planTranslation(ui.state.preferences.translation);
   const p = planProgress(plan, translation, ui.state.progress);
   const nextLabel = p.next === null ? 'Every verse kept. Review any of them below.' : `${p.started ? 'Continue' : 'Begin'} with ${plan.verses[p.next].reference}`;
-  return `<div class="practice-top"><button class="text-button" data-nav="plans">← All plans</button><span class="pill">${translation === 'bsb' ? 'Berean Standard Bible' : 'WEB British'}</span></div>
+  return `<div class="practice-top"><button class="text-button" data-nav="plans">← All plans</button><span class="pill">${e(translation === 'webbe' ? 'WEB British' : editions[translation].name)}</span></div>
     <header class="page-head"><p class="eyebrow">${e(plan.cadence.toUpperCase())}</p><h1 id="page-title" tabindex="-1">${e(plan.title)}</h1>
     <p class="muted">${e(plan.summary)}</p>${meter(p.kept, p.total)}</header>
     ${p.next === null ? `<p class="plan-done">${e(nextLabel)}</p>` : `<button class="primary" data-plan-verse="${p.next}">${e(nextLabel)} <span aria-hidden="true">→</span></button>`}

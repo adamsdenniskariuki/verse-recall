@@ -22,7 +22,7 @@ async function solveBank(page: Page) {
   await page.locator('[data-action="check-bank"]').click();
 }
 
-test('six playable passages and separate progress', async ({ page }) => {
+test('nine playable passages and separate progress', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('./');
@@ -49,7 +49,7 @@ test('six playable passages and separate progress', async ({ page }) => {
     await page.locator('.results [data-nav="today"]').click();
   }
   const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY);
-  expect(Object.keys(saved.progress)).toHaveLength(6);
+  expect(Object.keys(saved.progress)).toHaveLength(9);
   expect(Object.values(saved.progress).every((value: unknown) => (value as { unaided: number }).unaided === 1)).toBe(true);
   expect(errors).toEqual([]);
 });
@@ -761,6 +761,35 @@ test('Bible picker adds official OT and NT verses and transfers progress', async
     await fresh.reload();
     await expect(fresh.locator('.results .lead')).toContainText('unaided');
   } finally { await nextDevice.close(); }
+});
+
+test('KJV is an opt-in third translation with its rights note', async ({ page }) => {
+  const bibleRequests: string[] = [];
+  page.on('request', request => { if (request.url().includes('/bibles/')) bibleRequests.push(request.url()); });
+  await page.goto('./');
+  await expect(page.locator('.verse-card').first()).toContainText('WEB British');
+  await page.locator('[data-action="browse-bibles"]').click();
+  await expect(page.locator('#bible-translation')).toHaveValue('webbe');
+  await expect(page.locator('[data-bible-action="add"]')).toBeEnabled();
+  expect(bibleRequests.some(url => url.includes('/kjv1-'))).toBe(false);
+  await chooseBibleVerse(page, 'kjv', 'Psalm', '23', '1');
+  await expect(page.locator('#bible-preview blockquote')).toHaveText('The LORD is my shepherd; I shall not want.');
+  await expect(page.locator('#bible-preview')).toContainText('In the United Kingdom, rights are vested in the Crown and administered by Cambridge University Press.');
+  await expect(page.locator('#bible-preview a', { hasText: 'Rights' })).toHaveAttribute('href', /cambridge\.org/);
+  await page.locator('[data-bible-action="add"]').click();
+  await expect(page.locator('#bible-status')).toContainText('added to');
+  await page.locator('[data-bible-action="close"]').click();
+  const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY);
+  expect(saved.preferences.translation).toBe('kjv');
+  expect(saved.official.map((v: { translation: string; snapshot: string }) => [v.translation, v.snapshot])).toEqual([['kjv', expect.stringMatching(/^kjv1-/)]]);
+  await preferences(page);
+  await expect(page.locator('#translation option[value="kjv"]')).toHaveText('KJV (King James)');
+  await page.locator('#translations-panel summary').click();
+  await expect(page.locator('#translations-panel')).toContainText('King James Version (KJV)');
+  await expect(page.locator('#translations-panel')).toContainText('not legal advice');
+  await expect(page.locator('#translation')).toHaveValue('kjv');
+  await closePreferences(page);
+  await expect(page.locator('.verse-card')).toHaveCount(4);
 });
 
 test('Bible picker shows loading errors and rejects oversized ranges', async ({ page }) => {

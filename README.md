@@ -9,7 +9,7 @@ Live at **<https://verserecall.madebyfavor.com/>**.
 - **Content:** ten curated memory plans (Foundations, Psalm 23, the Romans Road, the
   Beatitudes, the Lord’s Prayer, Fruit of the Spirit, the Armour of God, comfort for
   anxious days, promises, and a verse a week for a year), a verse of the day, and the
-  whole 66-book Bible in **WEB British** and **BSB** via a book/chapter/verse picker.
+  whole 66-book Bible in **WEB British**, **BSB** and the **KJV** via a book/chapter/verse picker.
   You can also add personal passages.
 - **Rhythm:** spaced reviews, gentle streaks with saved streak freezes, XP and badges.
 - **Comfort:** serif scripture with a clean interface, a dyslexia-friendly reading font,
@@ -96,7 +96,7 @@ device; no multi-tab sync.
 
 ## Content provenance and rights
 
-Only public-domain/CC0 texts are bundled. **NIV, ESV, NKJV and KJV are not included**, and no
+Only public-domain/CC0 texts are bundled. **NIV, ESV and NKJV are not included**, and no
 licence is claimed for them. Shuffled or hidden text is presented as a learning exercise,
 not an altered translation.
 
@@ -104,6 +104,13 @@ not an altered translation.
 |---|---|---|
 | WEB British Edition (2020 stable) | [eng-webbe VPL](https://ebible.org/Scriptures/eng-webbe_vpl.zip) via [ebible.org](https://ebible.org/find/details.php?id=eng-webbe); not the American WEB | [Public domain](https://ebible.org/eng-webbe/copyright.htm). “World English Bible” is a trademark. |
 | Berean Standard Bible | [bsb.txt](https://bereanbible.com/bsb.txt) from [official downloads](https://berean.bible/downloads.htm), snapshot 20 September 2026 | [CC0 / public domain](https://berean.bible/terms.htm) since 30 April 2023 |
+| King James Version (1769 standardised text) | [eng-kjv VPL](https://ebible.org/Scriptures/eng-kjv_vpl.zip) via [ebible.org](https://ebible.org/find/details.php?id=eng-kjv), files dated 26 September 2026; Apocrypha not included | Public domain in most countries; see the note below |
+
+**KJV rights note** (general information, not legal advice): the KJV is in the public domain
+in most countries. In the United Kingdom, rights are vested in the Crown and administered by
+Cambridge University Press. See Cambridge’s
+[rights and permissions](https://www.cambridge.org/gb/universitypress/bibles/about/rights-and-permissions)
+page. KJV is opt-in: existing users keep their chosen translation.
 
 BSB attribution: “The Holy Bible, Berean Standard Bible, BSB is produced in cooperation with
 Bible Hub, Discovery Bible, unfoldingWord, Bible Aquifer, OpenBible.com, and the Berean
@@ -111,13 +118,17 @@ Bible Translation Committee.”
 
 - `sources/official-verses.json` holds independent receipts (URL, time, SHA-256) for the
   starter verses. The fidelity test compares the bundled text to them.
-- `sources/bible-catalog-receipt.json` records input hashes and coverage: 31,098 WEB British
-  and 31,086 BSB references across 66 books. Blank source references are listed explicitly.
-- `tools/build_bible_catalog.py` rebuilds `public/bibles/<snapshot>/` (2,378 chapter files
-  plus a manifest) from the official downloads. `src/bible-version.ts` pins the manifest
+- `sources/bible-catalog-receipt.json` records input hashes and coverage: 31,098 WEB British,
+  31,086 BSB and 31,102 KJV references across 66 books. Blank source references are listed explicitly.
+- `tools/build_bible_catalog.py` rebuilds `public/bibles/<snapshot>/` (1,189 chapter files per
+  translation plus a manifest) from the official downloads. WEB British and BSB share the
+  `v1-…` snapshot; KJV has its own `kjv1-…` snapshot, added with `--kjv-only` so the
+  published v1 files stay byte-identical. KJV pilcrows and the brackets marking supplied
+  words are removed, and Psalm superscriptions (USFM `\d` headings) are not included in
+  verse 1, as in printed editions. `src/bible-version.ts` pins the manifest
   hash, and each manifest entry pins its chapter hash. Chapters load on demand and are
   verified. Git attributes disable newline conversion so the hashes hold on every OS.
-- Every curated plan verse is tested to resolve in both editions. Keep old snapshot
+- Every curated plan verse is tested to resolve in all three editions. Keep old snapshot
   folders when publishing a new one, because saves reference them.
 - API.Bible and other licensed translations remain deferred until rights for hiding,
   shuffling, caching and offline use are granted in writing.

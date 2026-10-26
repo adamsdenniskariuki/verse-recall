@@ -1,4 +1,5 @@
 import type { Progress } from './engine';
+import { BIBLE_TRANSLATIONS } from './bible-catalog';
 import { planProgress, plans } from './plans';
 
 /** Daily rhythm and XP. Optional in saves so older saves and backups load unchanged. */
@@ -68,7 +69,7 @@ const BADGE_RULES: (Badge & { earned: (s: BadgeState) => boolean })[] = [
   { id: 'three-days', title: 'Three days', text: 'Returned three days in a row.', earned: s => (s.journey?.best ?? 0) >= 3 },
   { id: 'seven-days', title: 'A week of days', text: 'Returned seven days in a row.', earned: s => (s.journey?.best ?? 0) >= 7 },
   { id: 'ten-kept', title: 'Ten treasured', text: 'Ten passages kept by heart.', earned: s => keptCount(s) >= 10 },
-  { id: 'plan-complete', title: 'Plan complete', text: 'Kept every verse in a memory plan.', earned: s => plans.some(plan => (['webbe', 'bsb'] as const).some(t => { const p = planProgress(plan, t, s.progress); return p.kept === p.total; })) },
+  { id: 'plan-complete', title: 'Plan complete', text: 'Kept every verse in a memory plan.', earned: s => plans.some(plan => BIBLE_TRANSLATIONS.some(t => { const p = planProgress(plan, t, s.progress); return p.kept === p.total; })) },
   { id: 'thirty-days', title: 'Thirty days', text: 'Returned thirty days in a row.', earned: s => (s.journey?.best ?? 0) >= 30 },
   { id: 'faithful', title: 'Faithful', text: 'Gathered 1,000 XP through steady practice.', earned: s => (s.journey?.xp ?? 0) >= 1000 },
 ];
