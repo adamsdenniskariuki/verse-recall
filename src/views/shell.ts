@@ -23,7 +23,7 @@ export function notice(): string {
 export const TOUR: readonly { view: Exclude<View, 'practice'>; title: string; body: string }[] = [
   { view: 'today', title: 'Today', body: 'Each day brings a verse of the day, your current plan and any reviews that are ready. Small moments, kept faithfully.' },
   { view: 'plans', title: 'Plans', body: 'Curated plans walk through Psalm 23, the Beatitudes, the Armour of God, a verse a week for a year and more, one passage at a time.' },
-  { view: 'library', title: 'Library', body: 'Every passage you are learning lives here. Choose any verse from the WEB British or Berean Standard Bible, or add your own.' },
+  { view: 'library', title: 'Library', body: 'Every passage you are learning lives here. Choose any verse from the WEB British, Berean Standard Bible or King James Version, or add your own.' },
   { view: 'review', title: 'Practice & review', body: 'Read, fill the gaps, arrange the words, then recall from memory. Hints are always there and honestly recorded. Reviews return when it is time.' },
   { view: 'progress', title: 'Progress', body: 'A gentle record of what you have kept. Settings holds themes, readable fonts, dark mode and private backups. Nothing leaves this device.' },
 ];

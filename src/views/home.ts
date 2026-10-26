@@ -1,4 +1,4 @@
-import { collectionName, passageKey, translationName, type Passage } from '../content';
+import { collectionName, editions, passageKey, translationName, type Passage } from '../content';
 import { words } from '../engine';
 import { escapeHtml as e } from '../html';
 import { planProgress, plans, planTranslation, verseOfTheDay } from '../plans';
@@ -146,7 +146,7 @@ export function progress(): string {
       <div><strong>${dueReviews(ui.state, Date.now()).length}</strong><span>reviews ready</span></div>
     </section>
     ${journey()}
-    <section aria-labelledby="plan-progress-heading"><div class="section-heading"><h2 id="plan-progress-heading">Plans</h2><span class="pill">${e(translation === 'bsb' ? 'Berean Standard Bible' : 'WEB British')}</span></div>
+    <section aria-labelledby="plan-progress-heading"><div class="section-heading"><h2 id="plan-progress-heading">Plans</h2><span class="pill">${e(translation === 'webbe' ? 'WEB British' : editions[translation].name)}</span></div>
       <div class="plan-progress">${plans.map(plan => {
         const p = planProgress(plan, translation, ui.state.progress);
         return `<button data-plan="${e(plan.id)}"><span>${e(plan.title)}</span>${meter(p.kept, p.total)}</button>`;

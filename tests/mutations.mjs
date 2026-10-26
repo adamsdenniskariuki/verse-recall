@@ -21,7 +21,7 @@ const cases = [
     'return { ...state, run: null, preferences: { ...state.preferences, ...patch } };'],
   ['review queue survives content filters', 'src/store.ts',
     '.filter(p => p.due <= now)', '.filter(p => p.due <= now && p.key.includes(state.preferences.translation))'],
-  ['six playable passages and separate progress', 'src/engine.ts',
+  ['nine playable passages and separate progress', 'src/engine.ts',
     "if (run.stage === 'arrange' && bankCorrect(p, run)) return { ...run, stage: 'recall', bankCompleted: true };",
     "if (run.stage === 'arrange' && bankCorrect(p, run)) return { ...run, stage: 'arrange', bankCompleted: true };", 'browser'],
   ['theme preferences preserve typed recall', 'src/main.ts',
@@ -130,6 +130,10 @@ const cases = [
     ".filter(file => file.startsWith('assets/'))", '.filter(() => false)', 'pages'],
   ['installs, works offline and keeps opened Bible chapters', 'public/manifest.webmanifest',
     '"display": "standalone"', '"display": "browser"', 'pages'],
+  ['KJV is opt-in and kept apart from the original WEB British/BSB snapshot', 'src/bible-catalog.ts',
+    "translation === 'kjv' ? KJV_SNAPSHOT : BIBLE_SNAPSHOT", 'BIBLE_SNAPSHOT'],
+  ['KJV is an opt-in third translation with its rights note', 'src/content.ts',
+    'In the United Kingdom, rights are vested in the Crown and administered by Cambridge University Press.', 'Free to use everywhere.', 'browser'],
 ];
 await mkdir('verification', { recursive: true });
 const report = [];
@@ -147,6 +151,16 @@ function run(name, browser) {
   if (result.error) throw result.error;
   return { exit: result.status, output: result.stdout + result.stderr, command: `node ${args.join(' ')}` };
 }
+// Windows indexers and antivirus can briefly lock a source file; retry rather than leave it mutated.
+async function writeSource(file, text) {
+  for (let attempt = 1; ; attempt++) {
+    try { return await writeFile(file, text); }
+    catch (error) {
+      if (attempt >= 20 || !['EBUSY', 'EPERM', 'UNKNOWN'].includes(error.code)) throw error;
+      await new Promise(resolve => setTimeout(resolve, 250 * attempt));
+    }
+  }
+}
 for (const [name, file, before, after, browser] of cases) {
   const original = await readFile(file, 'utf8');
   if (original.split(before).length !== 2) throw new Error(`Mutation anchor must occur exactly once: ${name}`);
@@ -154,14 +168,14 @@ for (const [name, file, before, after, browser] of cases) {
   if (baseline.exit !== 0) throw new Error(`Baseline failed: ${name}\n${baseline.output}`);
   let broken;
   try {
-    await writeFile(file, original.replace(before, after));
+    await writeSource(file, original.replace(before, after));
     broken = run(name, browser);
     if (broken.exit === 0) throw new Error(`Mutation survived: ${name}`);
     if (!/AssertionError|Error: expect|Expected|not ok/u.test(broken.output)) {
       throw new Error(`Mutation did not fail an assertion: ${name}\n${broken.output}`);
     }
   } finally {
-    await writeFile(file, original);
+    await writeSource(file, original);
   }
   const restored = run(name, browser);
   if (restored.exit !== 0) throw new Error(`Restored test failed: ${name}\n${restored.output}`);

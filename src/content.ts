@@ -1,4 +1,4 @@
-export type Translation = 'webbe' | 'bsb' | 'personal';
+export type Translation = 'webbe' | 'bsb' | 'kjv' | 'personal';
 export type Testament = 'OT' | 'NT';
 export type Filter = Testament | 'both';
 
@@ -51,6 +51,15 @@ export const editions = {
     rightsUrl: 'https://berean.bible/terms.htm',
     attribution: 'The Holy Bible, Berean Standard Bible, BSB is produced in cooperation with Bible Hub, Discovery Bible, unfoldingWord, Bible Aquifer, OpenBible.com, and the Berean Bible Translation Committee.',
   },
+  kjv: {
+    name: 'King James Version',
+    short: 'KJV',
+    edition: '1769-standard-ebible-2026-09-26',
+    description: 'Standardised 1769 text from eBible.org (source files dated 26 September 2026); Apocrypha not included.',
+    rights: 'The KJV is in the public domain in most countries. In the United Kingdom, rights are vested in the Crown and administered by Cambridge University Press. This is general information, not legal advice.',
+    rightsUrl: 'https://www.cambridge.org/gb/universitypress/bibles/about/rights-and-permissions',
+    attribution: 'King James Version (Authorized Version), 1769 standardised text, eBible.org.',
+  },
 } as const;
 
 // Each translation maps explicitly to its own source numbering. A future provider
@@ -97,6 +106,27 @@ export const passages: readonly Passage[] = [
     text: 'Peace I leave with you; My peace I give to you. I do not give to you as the world gives. Do not let your hearts be troubled; do not be afraid.',
     source: 'https://bereanbible.com/bsb.txt',
     mapping: { scheme: 'bsb', book: 'John', chapter: 14, verses: [27] },
+  },
+  {
+    id: 'word-in-heart', translation: 'kjv', edition: editions.kjv.edition,
+    reference: 'Psalm 119:11', testament: 'OT', title: 'A place in your heart',
+    text: 'Thy word have I hid in mine heart, that I might not sin against thee.',
+    source: 'https://ebible.org/Scriptures/eng-kjv_vpl.zip',
+    mapping: { scheme: 'eng-kjv-vpl', book: 'PSA', chapter: 119, verses: [11] },
+  },
+  {
+    id: 'day-and-night', translation: 'kjv', edition: editions.kjv.edition,
+    reference: 'Joshua 1:8', testament: 'OT', title: 'Day and night',
+    text: 'This book of the law shall not depart out of thy mouth; but thou shalt meditate therein day and night, that thou mayest observe to do according to all that is written therein: for then thou shalt make thy way prosperous, and then thou shalt have good success.',
+    source: 'https://ebible.org/Scriptures/eng-kjv_vpl.zip',
+    mapping: { scheme: 'eng-kjv-vpl', book: 'JOS', chapter: 1, verses: [8] },
+  },
+  {
+    id: 'peace-with-you', translation: 'kjv', edition: editions.kjv.edition,
+    reference: 'John 14:27', testament: 'NT', title: 'Peace to carry with you',
+    text: 'Peace I leave with you, my peace I give unto you: not as the world giveth, give I unto you. Let not your heart be troubled, neither let it be afraid.',
+    source: 'https://ebible.org/Scriptures/eng-kjv_vpl.zip',
+    mapping: { scheme: 'eng-kjv-vpl', book: 'JOH', chapter: 14, verses: [27] },
   },
 ];
 

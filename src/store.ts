@@ -93,7 +93,7 @@ export function validState(value: unknown): value is SavedState {
   const provider = createProvider(value.personal, selectedBiblePassages(official));
   const p = value.preferences;
   if (!exactKeys(p, ['translation', 'filter', 'preset', 'colour', 'accent', 'font', ...(Object.hasOwn(p, 'chosen') ? ['chosen'] : [])]) ||
-      !oneOf(p.translation, ['webbe', 'bsb', 'personal']) || !oneOf(p.filter, ['both', 'OT', 'NT']) ||
+      !oneOf(p.translation, ['webbe', 'bsb', 'kjv', 'personal']) || !oneOf(p.filter, ['both', 'OT', 'NT']) ||
       !oneOf(p.preset, ['calm', 'study', 'focus']) || !oneOf(p.colour, ['light', 'dark', 'system']) ||
       !oneOf(p.accent, ACCENTS) || !oneOf(p.font, FONTS) ||
       (Object.hasOwn(p, 'chosen') && (!Array.isArray(p.chosen) || !p.chosen.every(key => oneOf(key, APPEARANCE_KEYS)) ||

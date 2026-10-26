@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
-import { BIBLE_SNAPSHOT } from './src/bible-version';
+import { BIBLE_SNAPSHOT, KJV_SNAPSHOT } from './src/bible-version';
+
+const SNAPSHOTS = [BIBLE_SNAPSHOT, KJV_SNAPSHOT];
 
 const PUBLIC_SHELL = ['/', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
 
@@ -11,11 +13,11 @@ const serviceWorker = (): Plugin => ({
   apply: 'build',
   generateBundle(_, bundle) {
     const shell = [...PUBLIC_SHELL, ...Object.keys(bundle).filter(file => file.startsWith('assets/')).map(file => `/${file}`).sort()];
-    const version = createHash('sha256').update(`${BIBLE_SNAPSHOT}\n${shell.join('\n')}`).digest('hex').slice(0, 16);
+    const version = createHash('sha256').update(`${SNAPSHOTS.join('\n')}\n${shell.join('\n')}`).digest('hex').slice(0, 16);
     const source = readFileSync('tools/service-worker.js', 'utf8')
       .replace('__VERSION__', JSON.stringify(version))
       .replace('__SHELL__', JSON.stringify(shell))
-      .replace('__SNAPSHOT__', JSON.stringify(BIBLE_SNAPSHOT));
+      .replace('__SNAPSHOTS__', JSON.stringify(SNAPSHOTS));
     this.emitFile({ type: 'asset', fileName: 'sw.js', source });
   },
 });

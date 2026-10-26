@@ -1,11 +1,10 @@
-import { BIBLE_SNAPSHOT } from './bible-version';
-import { loadBibleManifest, resolveBibleSelection, type BibleBook, type BibleManifest, type BibleSelection, type BibleTranslation } from './bible-catalog';
+import { loadBibleEdition, resolveBibleSelection, snapshotFor, type BibleBook, type BibleEdition, type BibleSelection, type BibleTranslation } from './bible-catalog';
 import { editions, type Filter, type Passage } from './content';
 import { escapeHtml as e, options } from './html';
 
 export class BiblePicker {
   readonly dialog = document.createElement('dialog');
-  private index?: BibleManifest;
+  private index?: BibleEdition;
   private translation: BibleTranslation = 'webbe';
   private filter: Filter = 'both';
   private query = '';
@@ -55,7 +54,7 @@ export class BiblePicker {
     this.dialog.addEventListener('change', event => {
       const node = event.target;
       if (!(node instanceof HTMLSelectElement)) return;
-      if (node.id === 'bible-translation') { this.translation = node.value as BibleTranslation; this.chooseBook(); }
+      if (node.id === 'bible-translation') { this.translation = node.value as BibleTranslation; void this.load('bible-translation'); return; }
       else if (node.id === 'bible-testament') { this.filter = node.value as Filter; this.chooseBook(); }
       else if (node.id === 'bible-book') { this.book = node.value; this.chapter = 1; this.resetVerses(); }
       else if (node.id === 'bible-chapter') { this.chapter = Number(node.value); this.resetVerses(); }
@@ -68,23 +67,24 @@ export class BiblePicker {
   }
   open(translation: string, filter: Filter): void {
     if (this.dialog.open) return;
-    this.translation = translation === 'bsb' ? 'bsb' : 'webbe';
+    this.translation = translation === 'bsb' || translation === 'kjv' ? translation : 'webbe';
     this.filter = filter;
     this.query = '';
     this.dialog.showModal();
     void this.load();
   }
-  private async load(): Promise<void> {
+  private async load(focusId?: string): Promise<void> {
     const generation = ++this.generation;
+    this.index = undefined;
     this.dialog.innerHTML = `<div class="dialog-heading"><h2 id="bible-picker-title">Choose from the Bible</h2><button data-bible-action="close">Close ×</button></div><div class="dialog-content"><p role="status">Loading official Bible index…</p></div>`;
     this.dialog.querySelector<HTMLButtonElement>('button')!.focus();
     try {
-      const index = await loadBibleManifest();
+      const index = await loadBibleEdition(this.translation);
       if (generation !== this.generation) return;
       this.index = index;
       this.chooseBook();
       this.render();
-      this.dialog.querySelector<HTMLButtonElement>('[data-bible-action="close"]')!.focus();
+      this.dialog.querySelector<HTMLElement>(focusId ? `#${focusId}` : '[data-bible-action="close"]')!.focus();
       await this.showPreview();
     } catch (error) {
       if (generation !== this.generation) return;
@@ -92,7 +92,7 @@ export class BiblePicker {
     }
   }
   private books(): BibleBook[] {
-    return (this.index?.translations[this.translation].books ?? []).filter(book =>
+    return (this.index?.books ?? []).filter(book =>
       (this.filter === 'both' || book.testament === this.filter) && book.name.toLowerCase().includes(this.query.trim().toLowerCase()));
   }
   private currentBook(): BibleBook | undefined { return this.books().find(b => b.id === this.book); }
@@ -117,9 +117,9 @@ export class BiblePicker {
     const chapters = book?.chapters ?? [];
     const numbers = chapters.find(c => c.number === this.chapter)?.verses ?? [];
     this.dialog.innerHTML = `<div class="dialog-heading"><h2 id="bible-picker-title">Choose from the Bible</h2><button data-bible-action="close">Close ×</button></div>
-      <div class="dialog-content"><p class="small">Official WEB British and BSB text. Browse 66 shared books (39 Old Testament, 27 New Testament). No notes, audio or deuterocanonical books. Verse availability follows each edition.</p>
+      <div class="dialog-content"><p class="small">Official WEB British, BSB and KJV text. Browse 66 shared books (39 Old Testament, 27 New Testament). No notes, audio or deuterocanonical books. Verse availability follows each edition.</p>
       <div class="settings-grid">
-        <label>Translation<select id="bible-translation">${options(this.translation, [['webbe', 'WEB British'], ['bsb', 'BSB']])}</select></label>
+        <label>Translation<select id="bible-translation">${options(this.translation, [['webbe', 'WEB British'], ['bsb', 'BSB'], ['kjv', 'KJV (King James)']])}</select></label>
         <label>Testament<select id="bible-testament">${options(this.filter, [['both', 'Both'], ['OT', 'Old Testament'], ['NT', 'New Testament']])}</select></label>
       </div><label>Search book names<input id="bible-book-search" type="search" value="${e(this.query)}" placeholder="For example, Isaiah or John"></label>
       <div class="settings-grid">
@@ -141,7 +141,7 @@ export class BiblePicker {
     button.disabled = true;
     if (!this.currentBook()) { this.status('No books match this search and Testament. Change the search or filter.'); return; }
     this.status('Loading and validating official verse text…');
-    const selection: BibleSelection = { snapshot: BIBLE_SNAPSHOT, translation: this.translation, book: this.book, chapter: this.chapter, start: this.start, end: this.end };
+    const selection: BibleSelection = { snapshot: snapshotFor(this.translation), translation: this.translation, book: this.book, chapter: this.chapter, start: this.start, end: this.end };
     try {
       const passage = await resolveBibleSelection(selection);
       if (generation !== this.generation) return;

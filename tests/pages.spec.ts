@@ -45,7 +45,7 @@ test.describe('installable offline app', () => {
     }
     const worker = await request.get('/sw.js');
     expect(worker.ok()).toBe(true);
-    expect(await worker.text()).not.toMatch(/__(VERSION|SHELL|SNAPSHOT)__/);
+    expect(await worker.text()).not.toMatch(/__(VERSION|SHELL|SNAPSHOTS)__/);
 
     await page.goto('./');
     await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));

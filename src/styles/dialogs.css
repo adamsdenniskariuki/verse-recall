@@ -7,6 +7,9 @@
 .dialog-content h3 { font-size: 1.25rem; }
 .dialog-content details { border-top: 1px solid var(--cp-border); padding: 8px 0; }
 .dialog-content details summary { font-size: 1rem; font-weight: 600; }
+.translation-list dt { font-weight: 600; margin-top: 12px; }
+.translation-list dd { margin: 0; }
+.translation-list dd p { margin: 4px 0; }
 .dialog-content .actions { margin-top: 16px; margin-bottom: 16px; }
 .dialog-content input:not([type="checkbox"]) { font: inherit; display: block; width: 100%; min-width: 0; min-height: 44px; margin-top: 8px; padding: 8px 12px; color: var(--cp-text); background: var(--cp-bg-elevated); border: 1px solid var(--cp-border-strong); border-radius: 12px; }
 .dialog-content input[type="file"] { padding: 12px 4px; font-size: .85rem; }
