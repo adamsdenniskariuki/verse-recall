@@ -1,6 +1,7 @@
 import { editions, translationName, type Passage } from '../content';
 import { activeIndices, compareRecall, firstLetters, slotCorrect, words, type Run } from '../engine';
 import { BADGES } from '../journey';
+import { openInLinks } from '../open-in';
 import { canSpeak, speaking } from '../speech';
 import { escapeHtml as e } from '../html';
 import { date, label, plural, runPassage, ui } from '../ui';
@@ -65,7 +66,7 @@ export function practice(): string | null {
     <ol class="steps" aria-label="Learning stages">${stages.map((stage, i) => `<li ${run.stage === stage ? 'aria-current="step"' : ''}><span>${i + 1}</span>${stage[0].toUpperCase() + stage.slice(1)}</li>`).join('')}</ol>
     <div class="practice-heading"><p class="eyebrow">${e(p.reference)} · ${e(p.title)}</p><h1 id="page-title" tabindex="-1">${titles[run.stage]}</h1><p class="small">${run.stage === 'read' ? p.personal ? 'Personal original text, not independently verified. There is no timer.' : 'Official source text. Take your time; there is no timer.' : 'Learning exercise · Source wording is preserved separately.'}</p></div>
     <div class="practice-card">
-      ${run.stage === 'read' ? `<blockquote class="verse">${e(p.text)}</blockquote><p class="verse-citation">${e(p.reference)} · ${e(translationName(p))}</p><div class="actions"><button class="primary" data-action="next">I’m ready to practise →</button>${listenButton()}</div>`
+      ${run.stage === 'read' ? `<blockquote class="verse">${e(p.text)}</blockquote><p class="verse-citation">${e(p.reference)} · ${e(translationName(p))}</p>${p.personal ? '' : openInLinks(p.reference, ui.state.preferences.openIn)}<div class="actions"><button class="primary" data-action="next">I’m ready to practise →</button>${listenButton()}</div>`
         : run.stage === 'recall' ? `<label class="recall-label" for="answer">Write the verse from memory</label><p id="recall-help" class="small">No word bank. Capitalisation, spacing, curly apostrophes and sentence punctuation are not scored. Words and their order matter.</p>
           <textarea id="answer" rows="6" maxlength="4000" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="recall-help" placeholder="Start with the words you remember…">${e(run.answer)}</textarea>
           ${run.letters && !run.exposed ? `<aside class="hint-panel"><strong>First letters · hint</strong><p class="letters">${e(firstLetters(p.text))}</p></aside>` : ''}

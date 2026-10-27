@@ -4,6 +4,7 @@ import { makePersonal, MAX_JSON_BYTES } from './personal';
 import { confirmImport, defaultMergeOptions, exportBackup, parseImport, planImport, verseTemplate, type ImportPayload, type ImportPlan } from './transfer';
 import type { Preferences, SavedState } from './store';
 import { accents, fonts } from './theme';
+import { DEFAULT_OPEN_IN, OPEN_IN, OPEN_IN_NAMES } from './open-in';
 
 interface Host {
   state(): SavedState;
@@ -129,8 +130,9 @@ export class PreferencesDialog {
         <label>Colour mode<select id="colour" data-preference>${options(p.colour, [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']])}</select></label>
         <label>Theme colour<select id="accent" data-preference>${options(p.accent, Object.entries(accents).map(([value, item]) => [value, item.label]))}</select></label>
         <label>Reading font<select id="font" data-preference>${options(p.font, Object.entries(fonts).map(([value, item]) => [value, item.label]))}</select></label>
+        <label>Open in (Bible Gateway)<select id="openIn" data-preference>${options(p.openIn ?? DEFAULT_OPEN_IN, OPEN_IN.map(v => [v, `${v} · ${OPEN_IN_NAMES[v]}`]))}</select></label>
       </div><p class="font-preview verse">Joshua 1:8</p>
-      <p class="small">Calm: soft surfaces. Study: crisp structure. Focus: larger verse text. Classic pairs a serif for Scripture with a clean interface font; Readable uses wider spacing and simple letterforms. System colour follows your device. These choices do not reset your exercise or reviews.</p></section>
+      <p class="small">Calm: soft surfaces. Study: crisp structure. Focus: larger verse text. Classic pairs a serif for Scripture with a clean interface font; Readable uses wider spacing and simple letterforms. System colour follows your device. Open in links show the same reference on Bible Gateway in a new tab; Verse Recall never stores that text. These choices do not reset your exercise or reviews.</p></section>
       <details id="personal-panel"><summary>Personal verses <span class="small">· ${state.personal.length}/100</span></summary>
         <p class="small">Your own text, kept privately on this device. Not independently verified. Enter only text you are permitted to use; import does not grant redistribution rights.</p>
         <label>Add or edit<select id="edit-verse"><option value="">Add a new verse</option>${state.personal.map(v => `<option value="${e(v.id)}">${e(v.reference)} · ${e(v.translationLabel)}</option>`).join('')}</select></label>

@@ -9,6 +9,9 @@
 .practice-card { background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 20px; padding: 36px; box-shadow: var(--cp-shadow); }
 .verse { font-size: 1.65rem; line-height: 1.8; white-space: pre-line; margin: 0; font-weight: 400; overflow-wrap: anywhere; }
 .verse-citation { font-size: .85rem; color: var(--cp-text-soft); margin-top: 20px; }
+.open-in { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--cp-text-soft); }
+.open-in a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; font-weight: 600; }
+.open-in-note { flex-basis: 100%; }
 .feedback { color: var(--cp-accent); font-size: .9rem; margin: 16px 0 0; min-height: 1.5em; }
 .feedback:empty { min-height: 0; margin-top: 0; }
 .practice-note { font-size: .8rem; color: var(--cp-text-soft); margin: 16px 0; }

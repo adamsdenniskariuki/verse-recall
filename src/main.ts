@@ -1,5 +1,6 @@
 import './styles/index.css';
 import { collectionName } from './content';
+import { DEFAULT_OPEN_IN } from './open-in';
 import { activeIndices, bankCorrect, finish, hint, letterHint, nextStage, normalizeWord, placeToken, startRun, type Run } from './engine';
 import { choose, LEGACY_STORAGE_KEY, loadState, saveState, STORAGE_KEY, type StoragePort } from './store';
 import { escapeHtml as e } from './html';
@@ -210,7 +211,7 @@ const biblePicker = new BiblePicker((selection, passage) => {
   persist();
   render();
   return ui.saveError ?? `${passage.reference} added to the ${collectionName(selection.translation)} library. Your current exercise is unchanged.`;
-});
+}, () => ui.state.preferences.openIn ?? DEFAULT_OPEN_IN);
 
 app.addEventListener('click', event => {
   const button = (event.target as Element).closest<HTMLElement>('button, a[data-nav]');

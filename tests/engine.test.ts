@@ -750,4 +750,35 @@ test('journey and first-letter hints validate, save and travel in backups', asyn
   const local = { ...freshState(), journey: { xp: 400, current: 1, best: 9, lastDay: 20_400, freezes: 0 } };
   assert.deepEqual(planImport(local, incoming).next.journey, { ...journey, xp: 400, best: 9 });
   assert.equal(Object.hasOwn(planImport(freshState(), await parseImport(exportBackup(freshState()))).next, 'journey'), false);
+});test('open in links reach Bible Gateway without storing other translations', async () => {
+  const { DEFAULT_OPEN_IN, gatewayUrl, OPEN_IN, openInLinks } = await import('../src/open-in');
+  assert.deepEqual([...OPEN_IN], ['NKJV', 'AMP', 'MSG', 'NLT', 'ESV']);
+  assert.equal(gatewayUrl('John 3:16', 'NKJV'), 'https://www.biblegateway.com/passage/?search=John%203%3A16&version=NKJV');
+  assert.equal(gatewayUrl('Psalm 23:1–6', 'ESV'), 'https://www.biblegateway.com/passage/?search=Psalm%2023%3A1-6&version=ESV');
+  assert.equal(gatewayUrl('1 Corinthians 13:4', 'MSG'), 'https://www.biblegateway.com/passage/?search=1%20Corinthians%2013%3A4&version=MSG');
+  const html = openInLinks('John 3:16', 'NLT');
+  const links = [...html.matchAll(/<a href="([^"]+)" target="_blank" rel="noopener noreferrer"/gu)].map(m => m[1].replaceAll('&amp;', '&'));
+  assert.deepEqual(links.map(url => new URL(url).searchParams.get('version')), ['NLT', 'NKJV', 'AMP', 'MSG', 'ESV']);
+  assert.ok(links.every(url => url.startsWith('https://www.biblegateway.com/passage/?search=John%203%3A16&')));
+  assert.equal(openInLinks('John 3:16').indexOf(`version=${DEFAULT_OPEN_IN}`) < openInLinks('John 3:16').indexOf('version=AMP'), true);
+  const state = freshState();
+  assert.equal(Object.hasOwn(state.preferences, 'openIn'), false, 'older saves without the setting stay valid');
+  assert.ok(validState(state));
+  const chosen = updatePreferences(state, { openIn: 'MSG' });
+  assert.ok(validState(chosen));
+  assert.equal(validState({ ...chosen, preferences: { ...chosen.preferences, openIn: 'NIV' } }), false);
+  const raw = exportBackup(chosen, new Date('2026-10-27T00:00:00Z'));
+  assert.equal(JSON.parse(raw).state.preferences.openIn, 'MSG');
+  assert.equal(confirmImport(freshState(), planImport(freshState(), await parseImport(raw))).preferences.openIn, 'MSG');
+});
+test('progress for every starter fits beside a full personal library', async () => {
+  const full = freshState();
+  full.personal = await Promise.all(Array.from({ length: 100 }, (_, i) => makePersonal({ ...sample, reference: `Sample ${i}` })));
+  const all = [...passages, ...full.personal.map(personalPassage)];
+  for (const passage of all) {
+    const progress = finish(passage, { ...startRun(passage, 'review'), answer: passage.text }, undefined, 100);
+    full.progress[progress.key] = progress;
+  }
+  assert.equal(Object.keys(full.progress).length, 100 + passages.length);
+  assert.ok(validState(full));
 });

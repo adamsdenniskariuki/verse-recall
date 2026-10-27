@@ -134,6 +134,16 @@ const cases = [
     "translation === 'kjv' ? KJV_SNAPSHOT : BIBLE_SNAPSHOT", 'BIBLE_SNAPSHOT'],
   ['KJV is an opt-in third translation with its rights note', 'src/content.ts',
     'In the United Kingdom, rights are vested in the Crown and administered by Cambridge University Press.', 'Free to use everywhere.', 'browser'],
+  ['open in links reach Bible Gateway without storing other translations', 'src/open-in.ts',
+    "const order = [preferred, ...OPEN_IN.filter(v => v !== preferred)];", 'const order = [...OPEN_IN];'],
+  ['open in links reach Bible Gateway without storing other translations', 'src/store.ts',
+    "(Object.hasOwn(p, 'openIn') && !oneOf(p.openIn, OPEN_IN)) ||", ''],
+  ['open in links show the same reference on Bible Gateway', 'src/open-in.ts',
+    'target="_blank" rel="noopener noreferrer"', 'rel="noreferrer"', 'browser'],
+  ['open in links show the same reference on Bible Gateway', 'src/bible-picker.ts',
+    '${openInLinks(passage.reference, this.openIn())}', '${openInLinks(passage.reference)}', 'browser'],
+  ['progress for every starter fits beside a full personal library', 'src/store.ts',
+    'MAX_PERSONAL + official.length + passages.length', 'MAX_PERSONAL + official.length + 6'],
 ];
 await mkdir('verification', { recursive: true });
 const report = [];
