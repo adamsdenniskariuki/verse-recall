@@ -13,6 +13,8 @@ export default defineConfig({
     headless: true,
     viewport: { width: 390, height: 844 },
     trace: 'retain-on-failure',
+    // A fake microphone (a steady tone) for the voice tests; permission is still granted per test.
+    launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] },
   },
   webServer: process.env.WORDKEEP_TEST_URL ? undefined : {
     command: 'npm run dev -- --port 5180 --strictPort',

@@ -22,6 +22,16 @@ export interface FindState {
   found: FoundVerse[] | null;
   /** Wording of each result in the chosen translation, in the same order as found. */
   shown: ShownVerse[];
+  voice: VoiceState;
+}
+/** idle, or the step voice input is on: asking to download, downloading, listening, starting the private engine, or transcribing. */
+export type VoicePhase = 'idle' | 'consent' | 'downloading' | 'listening' | 'preparing' | 'transcribing';
+export interface VoiceState {
+  phase: VoicePhase;
+  /** Private voice download progress, 0 to 1. */
+  progress: number;
+  /** Whether the chosen private model is on this device, or null before checking. */
+  downloaded: boolean | null;
 }
 
 /** Mutable UI state shared by the controller and the view templates. */

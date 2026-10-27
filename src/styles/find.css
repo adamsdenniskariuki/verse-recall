@@ -3,6 +3,22 @@
 .find-row { display: flex; gap: 12px; margin-top: 8px; }
 .find-row input { flex: 1 1 auto; min-width: 0; min-height: 48px; padding: 10px 16px; border: 1px solid var(--cp-border-strong); border-radius: 12px; background: var(--cp-bg-elevated); color: var(--cp-text); font-size: 1.05rem; }
 .find-row button { flex: 0 0 auto; }
+.find-row .mic { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 8px 18px; }
+.find-row .mic.recording { border: 2px solid var(--cp-danger); font-weight: 700; }
+.find-row .mic svg { flex: none; }
+.voice-note { max-width: 760px; margin: 12px 0 0; }
+.voice-note .text-button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; vertical-align: middle; background: transparent; border-color: transparent; font-size: inherit; }
+.voice-panel { max-width: 760px; margin: 16px 0 0; padding: 20px; border: 1px solid var(--cp-border-strong); border-radius: 16px; background: var(--cp-bg-elevated); }
+.voice-panel h2 { margin: 0 0 8px; font-family: var(--font-ui, inherit); font-size: 1.1rem; font-weight: 700; letter-spacing: 0; }
+.voice-panel .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.voice-panel label { display: block; font-weight: 600; }
+.voice-progress { display: flex; align-items: center; gap: 12px; margin: 8px 0 12px; }
+.voice-progress progress { flex: 1 1 auto; height: 12px; accent-color: var(--cp-accent); }
+.voice-live { display: flex; align-items: center; gap: 8px; max-width: 760px; margin: 12px 0 0; padding: 10px 14px; border-left: 3px solid var(--cp-danger); border-radius: 8px; background: var(--cp-surface); color: var(--cp-text); }
+.voice-live.working { border-left-color: var(--cp-accent); }
+.rec-dot { flex: none; width: 12px; height: 12px; border-radius: 999px; background: var(--cp-danger); animation: rec-pulse 1.4s ease-in-out infinite; }
+@keyframes rec-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }
 .find-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 0; }
 .find-chips > .small { margin-right: 4px; }
 .chip { min-height: 44px; padding: 4px 14px; border-radius: 999px; font-size: .85rem; background: var(--cp-bg-elevated); }

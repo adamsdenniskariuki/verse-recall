@@ -170,6 +170,28 @@ const cases = [
     'aria-label="Add to my verses: ${e(shown.reference)}"', 'aria-label="Add ${e(shown.reference)} to my verses"', 'browser'],
   ['find a verse keeps working offline after the first search', 'tools/service-worker.js',
     'if (isSearch(url.pathname)) return event.respondWith(cacheFirst(request, SEARCH_CACHE));', '', 'pages'],
+  ['voice downloads keep only files that match their pinned size and hash', 'src/voice/verified.ts',
+    'if (await readVerified(cache, file)) loaded += file.bytes;', 'if (false) loaded += file.bytes;'],
+  ['voice downloads reject altered, oversized, short and failed files without keeping them', 'src/voice/verified.ts',
+    'if (received !== file.bytes || await sha256(bytes.buffer) !== file.sha256) throw', 'if (received !== file.bytes) throw'],
+  ['voice downloads reject altered, oversized, short and failed files without keeping them', 'src/voice/verified.ts',
+    'if (received + value.byteLength > file.bytes) {', 'if (false) {'],
+  ['private voice files are pinned to exact versions, sizes and hashes', 'src/voice/models.ts',
+    'Math.round(bytes / 1_000_000)', 'Math.round(bytes / 1_048_576)'],
+  ['speech errors become plain advice', 'src/voice/voice.ts',
+    "case 'not-allowed': case 'service-not-allowed': case 'NotAllowedError':", "case 'not-allowed': case 'service-not-allowed':"],
+  ['the voice preference is optional, validated and kept in backups', 'src/store.ts',
+    "(Object.hasOwn(p, 'voice') && !oneOf(p.voice, VOICE_ENGINES)) ||", ''],
+  ['find a verse by voice with the browser speech service', 'src/find-voice.ts',
+    'if (input) input.value = text;', '', 'browser'],
+  ['find a verse by voice with the browser speech service', 'src/find-voice.ts',
+    "focus('#find-query');", '', 'browser'],
+  ['find a verse explains when the browser has no speech service', 'src/views/find.ts',
+    "'SpeechRecognition' in window || 'webkitSpeechRecognition' in window", 'true', 'browser'],
+  ['downloads only after consent, transcribes on this device and works offline', 'src/find-voice.ts',
+    'if (!voice.downloaded) {', 'if (false) {', 'browser'],
+  ['handles a blocked microphone and passes an accessibility sweep', 'src/voice/voice.ts',
+    "speechError(error instanceof DOMException ? error.name : '')", "speechError('')", 'browser'],
 ];
 await mkdir('verification', { recursive: true });
 const report = [];
@@ -182,7 +204,7 @@ function run(name, browser) {
     ? ['node_modules/@playwright/test/cli.js', 'test', '--config', 'playwright.pages.config.ts', '--grep', `${name}$`]
     : browser
     ? ['node_modules/@playwright/test/cli.js', 'test', '--grep', `${name}$`]
-    : ['node_modules/tsx/dist/cli.mjs', '--test', '--test-name-pattern', `^${name}$`, 'tests/engine.test.ts', 'tests/search.test.ts'];
+    : ['node_modules/tsx/dist/cli.mjs', '--test', '--test-name-pattern', `^${name}$`, 'tests/engine.test.ts', 'tests/search.test.ts', 'tests/voice.test.ts'];
   const result = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 180_000 });
   if (result.error) throw result.error;
   return { exit: result.status, output: result.stdout + result.stderr, command: `node ${args.join(' ')}` };
