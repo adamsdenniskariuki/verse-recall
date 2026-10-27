@@ -1142,6 +1142,186 @@ test('find a verse by phrase, typo or spoken reference and act on the results', 
   expect(errors).toEqual([]);
 });
 
+// A stand-in for the browser speech service. Tests drive it through window.__recognition.
+const FAKE_SPEECH = () => {
+  class FakeRecognition {
+    lang = ''; interimResults = false; continuous = false; maxAlternatives = 1;
+    onresult: ((event: unknown) => void) | null = null;
+    onerror: ((event: unknown) => void) | null = null;
+    onend: (() => void) | null = null;
+    heard: string[] = [];
+    start() { (window as unknown as { __recognition: FakeRecognition }).__recognition = this; }
+    say(text: string, isFinal = false) { this.heard = [text]; this.onresult?.({ results: [{ isFinal, 0: { transcript: text } }] }); }
+    stop() { this.onend?.(); }
+    abort() { this.onerror?.({ error: 'aborted' }); this.onend?.(); }
+    fail(error: string) { this.onerror?.({ error }); this.onend?.(); }
+  }
+  (window as unknown as { webkitSpeechRecognition: unknown }).webkitSpeechRecognition = FakeRecognition;
+  delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+};
+// A stand-in for the Whisper worker: the real engine downloads about 58 MB, which the CI suite must not do.
+const FAKE_WHISPER = `let downloaded = false;
+self.onmessage = event => {
+  const request = event.data;
+  if (request.type === 'check') postMessage({ type: 'status', downloaded });
+  if (request.type === 'download') {
+    postMessage({ type: 'progress', loaded: 29, total: 58 });
+    setTimeout(() => { downloaded = true; postMessage({ type: 'downloaded' }); }, 400);
+  }
+  if (request.type === 'transcribe') {
+    if (!(request.audio instanceof Float32Array) || !request.audio.length) return postMessage({ type: 'error', message: 'No audio reached the engine.' });
+    postMessage({ type: 'preparing' });
+    setTimeout(() => postMessage({ type: 'text', text: 'a lamp unto my feet' }), 200);
+  }
+};`;
+async function openFind(page: Page) {
+  await page.goto('./');
+  await page.locator('nav [data-nav="find"]').click();
+  await expect(page.locator('#page-title')).toHaveText('What do you remember?');
+}
+const recognition = (page: Page, script: string) => page.evaluate(script);
+
+test('find a verse by voice with the browser speech service', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(FAKE_SPEECH);
+  await openFind(page);
+  const mic = page.locator('[data-action="find-voice"]');
+  await expect(mic).toHaveAccessibleName('Speak your search');
+  await expect(page.locator('.voice-note')).toContainText('In Chrome, audio goes to Google');
+  await page.locator('#find-query').fill('shepherd');
+  await mic.click();
+  await expect(page.locator('#find-status')).toHaveText('Listening. Speak now, then pause or tap Stop.');
+  await expect(mic).toHaveAccessibleName('Stop listening');
+  await expect(page.locator('.voice-live')).toContainText('audio is never saved');
+  expect(await axeViolations(page)).toEqual([]);
+  await recognition(page, "window.__recognition.say('John three')");
+  await expect(page.locator('#find-query')).toHaveValue('John three');
+  await recognition(page, "window.__recognition.say('John three sixteen', true)");
+  await mic.click();
+  await expect(page.locator('#find-status')).toHaveText('Heard “John three sixteen”. Edit it if needed, then press Search.');
+  await expect(page.locator('#find-query')).toBeFocused();
+  await expect(page.locator('.voice-live')).toHaveCount(0);
+  await expect(page.locator('.find-result')).toHaveCount(0);
+  await page.locator('#find-query').press('Enter');
+  await expect(page.locator('.find-result').first().locator('h3')).toHaveText('John 3:16');
+
+  await page.locator('#find-query').fill('kept');
+  await mic.click();
+  await recognition(page, "window.__recognition.fail('not-allowed')");
+  await expect(page.locator('#find-status')).toHaveClass(/error/);
+  await expect(page.locator('#find-status')).toContainText('Microphone access is blocked');
+  await expect(page.locator('#find-query')).toHaveValue('kept');
+  await expect(mic).toBeFocused();
+
+  await mic.click();
+  await recognition(page, 'window.__recognition.stop()');
+  await expect(page.locator('#find-status')).toContainText('Nothing was heard');
+
+  await mic.click();
+  await page.locator('nav [data-nav="today"]').click();
+  await page.locator('nav [data-nav="find"]').click();
+  await expect(mic).toHaveAccessibleName('Speak your search');
+  expect(errors).toEqual([]);
+});
+
+test('find a verse explains when the browser has no speech service', async ({ page }) => {
+  await page.addInitScript(() => {
+    delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+    delete (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
+  });
+  await openFind(page);
+  await expect(page.locator('.voice-note')).toContainText('This browser has no speech service.');
+  await page.locator('[data-action="find-voice"]').click();
+  await expect(page.locator('#find-status')).toContainText('Choose private voice in Settings, or type instead.');
+  await page.locator('.voice-note [data-action="preferences"]').click();
+  await expect(page.locator('#voice')).toBeVisible();
+});
+
+test.describe('private voice', () => {
+  test.use({ permissions: ['microphone'] });
+
+  test('downloads only after consent, transcribes on this device and works offline', async ({ page, context }) => {
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const network: string[] = [];
+    page.on('request', request => { if (!request.url().startsWith('http://127.0.0.1')) network.push(request.url()); });
+    await page.route('**/whisper.worker*', route => route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_WHISPER }));
+    await openFind(page);
+    await preferences(page);
+    await expect(page.locator('#voice option')).toHaveText(['Browser speech service', 'Private on this device · Standard (58 MB)', 'Private on this device · More accurate (94 MB)']);
+    await page.locator('#voice').selectOption('tiny');
+    await closePreferences(page);
+    let saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY);
+    expect(saved.preferences.voice).toBe('tiny');
+    await expect(page.locator('.voice-note')).toContainText('Needs a one-time download of about 58 MB.');
+
+    const mic = page.locator('[data-action="find-voice"]');
+    await mic.click();
+    await expect(page.locator('#voice-consent-title')).toHaveText('Download private voice?');
+    await expect(page.locator('.voice-panel')).toContainText('Your audio is never uploaded.');
+    await expect(page.locator('[data-action="voice-download"]')).toBeFocused();
+    await page.locator('[data-action="voice-cancel"]').click();
+    await expect(page.locator('#find-status')).toContainText('Private voice was not downloaded');
+    await expect(page.locator('.voice-panel')).toHaveCount(0);
+
+    await mic.click();
+    await page.locator('[data-action="voice-download"]').click();
+    await expect(page.locator('#voice-progress')).toHaveAttribute('value', '50');
+    await expect(page.locator('#voice-progress-text')).toHaveText('50%');
+    await expect(page.locator('#find-status')).toContainText('Private voice is ready');
+    await expect(mic).toBeFocused();
+    await expect(page.locator('.voice-note')).toContainText('Downloaded and available offline.');
+
+    await context.setOffline(true);
+    await mic.click();
+    await expect(page.locator('#find-status')).toContainText('Recording on this device');
+    await expect(page.locator('.voice-live')).toContainText('Recording on this device · audio is never saved');
+    await page.waitForTimeout(600);
+    await mic.click();
+    await expect(page.locator('#find-status')).toHaveText('Heard “a lamp unto my feet”. Edit it if needed, then press Search.');
+    await expect(page.locator('#find-query')).toHaveValue('a lamp unto my feet');
+    expect(network).toEqual([]);
+    // The dev server has no service worker to serve the search index offline; the Pages suite covers offline search.
+    await context.setOffline(false);
+    await page.locator('#find-query').press('Enter');
+    await expect(page.locator('.find-result').first().locator('h3')).toHaveText('Psalm 119:105');
+
+    await page.locator('[data-action="voice-remove"]').click();
+    await expect(page.locator('#find-status')).toHaveText('Private voice was removed from this device.');
+    saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY);
+    expect(saved.preferences.voice).toBe('tiny');
+    expect(errors).toEqual([]);
+  });
+
+  test('handles a blocked microphone and passes an accessibility sweep', async ({ page }) => {
+    await page.route('**/whisper.worker*', route => route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_WHISPER }));
+    await page.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('denied', 'NotAllowedError'));
+    });
+    await page.setViewportSize({ width: 360, height: 800 });
+    await openFind(page);
+    await preferences(page);
+    await page.locator('#voice').selectOption('base');
+    await closePreferences(page);
+    await page.locator('[data-action="find-voice"]').click();
+    await expect(page.locator('[data-action="voice-download"]')).toHaveText('Download 94 MB');
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme });
+      await page.waitForTimeout(300); // let colour transitions finish before measuring contrast
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      expect(await axeViolations(page), colorScheme).toEqual([]);
+    }
+    await page.screenshot({ path: 'verification/find-voice-consent-360.png', fullPage: true });
+    await page.locator('[data-action="voice-download"]').click();
+    await expect(page.locator('#find-status')).toContainText('Private voice is ready');
+    await page.locator('[data-action="find-voice"]').click();
+    await expect(page.locator('#find-status')).toContainText('Microphone access is blocked');
+    await expect(page.locator('#find-status')).toHaveClass(/error/);
+    await expect(page.locator('[data-action="find-voice"]')).toBeFocused();
+  });
+});
+
 test('find a verse reports a broken search index', async ({ page }) => {
   // A well-formed index with one altered word: only the SHA-256 check can catch it.
   await page.route('**/search/**/meta.json', async route => {

@@ -27,7 +27,9 @@ Live at **<https://verserecall.madebyfavor.com/>**.
 
 ```mermaid
 flowchart LR
-  Q[Typed words or reference] --> R[Reference parser]
+  S[Speech] -->|browser service or on-device Whisper| T[Editable text]
+  T --> Q[Typed words or reference]
+  Q --> R[Reference parser]
   Q --> K[Fuzzy keyword index]
   R --> M[Merge and rank]
   K --> M
@@ -50,6 +52,28 @@ flowchart LR
   requires 85% top-3 accuracy (currently 44/44).
 - **Privacy:** search runs entirely on the device. Recent searches (up to 20) are stored
   locally and included in backups; older backups without them still import.
+
+### Voice input
+
+Tap **Speak**; the words appear in the search box to check and edit before searching. The
+microphone is requested only then, and audio is never saved. Choose the engine under
+**Settings → Voice input** (stored locally and in backups; older saves default to the browser):
+
+| Engine | Where audio goes | Download |
+|---|---|---|
+| Browser speech service (Web Speech API) | The browser may send it to its provider; **in Chrome it goes to Google** | None |
+| Private · Standard (Whisper tiny.en, 8-bit) | Stays on the device | 58 MB, once |
+| Private · More accurate (Whisper base.en, 8-bit) | Stays on the device | 94 MB, once |
+
+Private voice (`src/voice/*`, lazy chunk plus a worker) downloads only after the user agrees.
+Each file is pinned by URL and SHA-256 in `src/voice/models.ts`: the model from Hugging Face
+([onnx-community/whisper-tiny.en](https://huggingface.co/onnx-community/whisper-tiny.en),
+[whisper-base.en](https://huggingface.co/onnx-community/whisper-base.en), pinned commits;
+Whisper by OpenAI, Apache-2.0), and transformers.js 4.3.1 (Apache-2.0) and the
+onnxruntime-web WASM runtime (MIT) from jsDelivr. Files are kept in the `verse-recall-voice`
+cache only after they pass their checks, so private voice then works offline. The engine
+reads only that cache, re-verifies it before use and never fetches at run time. Recording
+stops after 30 seconds. Find a verse can remove the download.
 
 ## Run locally
 
@@ -174,7 +198,7 @@ Vanilla TypeScript + Vite, with no UI framework or runtime dependencies.
 |---|---|
 | Controller and screens | `src/main.ts`, `src/ui.ts`, `src/views/*` (shell, today/library/review/progress, plans, practice) |
 | Learning engine | `src/engine.ts` (stages, hints, scoring, review intervals), `src/journey.ts` (streaks, XP, badges) |
-| Find a verse | `src/search/*` (lazy chunk), `src/views/find.ts`, `tools/build-search-index.ts` |
+| Find a verse | `src/search/*` (lazy chunk), `src/views/find.ts`, `tools/build-search-index.ts`; voice in `src/find-voice.ts` and `src/voice/*` (lazy chunk and worker) |
 | Content | `src/content.ts`, `src/plans.ts`, `src/bible-catalog.ts`, `src/bible-picker.ts` |
 | Saves and transfer | `src/store.ts` (validation, migration), `src/transfer.ts`, `src/personal.ts`, `src/preferences.ts` |
 | Look and sound | `src/theme.ts`, `src/styles/*.css`, `src/speech.ts`, `src/assets/verse-recall-mark.svg` |

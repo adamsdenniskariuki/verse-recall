@@ -16,7 +16,12 @@ export interface Preferences {
   chosen?: AppearanceKey[];
   /** Preferred Bible Gateway version for "Open in" links. Optional so older saves stay valid. */
   openIn?: OpenIn;
+  /** Voice input engine for Find a verse. Optional so older saves stay valid; unset means the browser speech service. */
+  voice?: VoiceEngine;
 }
+/** browser: the Web Speech API. tiny/base: private on-device Whisper, downloaded only after opting in. */
+export const VOICE_ENGINES = ['browser', 'tiny', 'base'] as const;
+export type VoiceEngine = typeof VOICE_ENGINES[number];
 export const APPEARANCE_KEYS = ['preset', 'colour', 'accent', 'font'] as const;
 export type AppearanceKey = typeof APPEARANCE_KEYS[number];
 export const ACCENTS = ['teal', 'amber', 'rose', 'neutral', 'blue', 'green', 'purple'] as const;
@@ -109,8 +114,8 @@ export function validState(value: unknown): value is SavedState {
   const official = Array.isArray(value.official) && value.official.every(validBibleSelection) ? value.official : [];
   const provider = createProvider(value.personal, selectedBiblePassages(official));
   const p = value.preferences;
-  if (!exactKeys(p, ['translation', 'filter', 'preset', 'colour', 'accent', 'font', ...(Object.hasOwn(p, 'chosen') ? ['chosen'] : []), ...(Object.hasOwn(p, 'openIn') ? ['openIn'] : [])]) ||
-      (Object.hasOwn(p, 'openIn') && !oneOf(p.openIn, OPEN_IN)) ||
+  if (!exactKeys(p, ['translation', 'filter', 'preset', 'colour', 'accent', 'font', ...(Object.hasOwn(p, 'chosen') ? ['chosen'] : []), ...(Object.hasOwn(p, 'openIn') ? ['openIn'] : []), ...(Object.hasOwn(p, 'voice') ? ['voice'] : [])]) ||
+      (Object.hasOwn(p, 'openIn') && !oneOf(p.openIn, OPEN_IN)) || (Object.hasOwn(p, 'voice') && !oneOf(p.voice, VOICE_ENGINES)) ||
       !oneOf(p.translation, ['webbe', 'bsb', 'kjv', 'personal']) || !oneOf(p.filter, ['both', 'OT', 'NT']) ||
       !oneOf(p.preset, ['calm', 'study', 'focus']) || !oneOf(p.colour, ['light', 'dark', 'system']) ||
       !oneOf(p.accent, ACCENTS) || !oneOf(p.font, FONTS) ||

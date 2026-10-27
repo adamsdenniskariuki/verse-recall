@@ -13,6 +13,7 @@ import { plural, provider, runPassage, ui, type View } from './ui';
 import { library, progress, review, today } from './views/home';
 import { plansView } from './views/plans';
 import { findView } from './views/find';
+import { refreshVoice, stopVoice, voiceAction, type VoiceHost } from './find-voice';
 import { listenLabel, practice } from './views/practice';
 import { earnedBadges, recordPractice } from './journey';
 import { speak, speaking, stopSpeaking } from './speech';
@@ -44,7 +45,7 @@ Object.assign(ui, {
   tour: null,
   reward: null,
   tourInvite: !tourSeen && !loaded.state.run && Object.keys(loaded.state.progress).length === 0,
-  find: { query: '', translation: planTranslation(loaded.state.preferences.translation), busy: false, status: null, found: null, shown: [] },
+  find: { query: '', translation: planTranslation(loaded.state.preferences.translation), busy: false, status: null, found: null, shown: [], voice: { phase: 'idle', progress: 0, downloaded: null } },
 });
 const media = matchMedia('(prefers-color-scheme: dark)');
 
@@ -109,7 +110,10 @@ function go(view: View): void {
   ui.loading = null;
   ui.plan = null;
   // Start downloading the offline search index as soon as Find opens.
-  if (view === 'find') void findRuntime().then(m => m.preload()).catch(() => undefined);
+  if (view === 'find') {
+    void findRuntime().then(m => m.preload()).catch(() => undefined);
+    void refreshVoice(voiceHost);
+  } else stopVoice();
 }
 /** Re-renders and puts focus back on the same control, so typing and keyboard use are not interrupted. */
 function renderKeepingFocus(): void {
@@ -138,6 +142,7 @@ function findStatus(message: string, error = false): void {
   node.textContent = '';
   setTimeout(() => { if (node.isConnected) node.textContent = message; }, 60);
 }
+const voiceHost: VoiceHost = { status: findStatus, render: renderKeepingFocus };
 const failure = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
 async function runSearch(query: string): Promise<void> {
   const q = query.trim();
@@ -299,7 +304,16 @@ function setTour(step: number | null): void {
 
 const preferencesDialog = new PreferencesDialog({
   state: () => ui.state,
-  changePreferences: patch => { ui.state = choose(ui.state, patch); persist(); render(); },
+  changePreferences: patch => {
+    ui.state = choose(ui.state, patch);
+    persist();
+    if (Object.hasOwn(patch, 'voice')) {
+      stopVoice();
+      ui.find.voice = { phase: 'idle', progress: 0, downloaded: null };
+      void refreshVoice(voiceHost);
+    }
+    render();
+  },
   applyImport: next => {
     ui.state = next;
     ui.selectedSlot = null;
@@ -328,6 +342,7 @@ app.addEventListener('click', event => {
   if (action === 'preferences') return preferencesDialog.open();
   if (action === 'browse-bibles') return biblePicker.open(ui.state.preferences.translation, ui.state.preferences.filter);
   if (action === 'add-personal') return preferencesDialog.open('personal');
+  if (action === 'find-voice' || action?.startsWith('voice-')) return void voiceAction(action, voiceHost);
   if (Object.keys(button.dataset).some(key => key.startsWith('find'))) return void findAction(button);
   if (action === 'find-clear-history') {
     delete ui.state.searches;

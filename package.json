@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/engine.test.ts tests/search.test.ts",
+    "test": "tsx --test tests/engine.test.ts tests/search.test.ts tests/voice.test.ts",
     "build:search": "tsx tools/build-search-index.ts",
     "test:browser": "playwright test",
     "test:pages": "playwright test --config playwright.pages.config.ts",
