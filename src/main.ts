@@ -14,6 +14,7 @@ import { library, progress, review, today } from './views/home';
 import { plansView } from './views/plans';
 import { findView } from './views/find';
 import { refreshVoice, stopVoice, voiceAction, type VoiceHost } from './find-voice';
+import { meaningAction, meaningHits, refreshMeaning } from './find-meaning';
 import { listenLabel, practice } from './views/practice';
 import { earnedBadges, recordPractice } from './journey';
 import { speak, speaking, stopSpeaking } from './speech';
@@ -45,7 +46,7 @@ Object.assign(ui, {
   tour: null,
   reward: null,
   tourInvite: !tourSeen && !loaded.state.run && Object.keys(loaded.state.progress).length === 0,
-  find: { query: '', translation: planTranslation(loaded.state.preferences.translation), busy: false, status: null, found: null, shown: [], voice: { phase: 'idle', progress: 0, downloaded: null } },
+  find: { query: '', translation: planTranslation(loaded.state.preferences.translation), busy: false, status: null, found: null, shown: [], voice: { phase: 'idle', progress: 0, downloaded: null }, meaning: { phase: 'idle', progress: 0, downloaded: null } },
 });
 const media = matchMedia('(prefers-color-scheme: dark)');
 
@@ -113,6 +114,7 @@ function go(view: View): void {
   if (view === 'find') {
     void findRuntime().then(m => m.preload()).catch(() => undefined);
     void refreshVoice(voiceHost);
+    void refreshMeaning(voiceHost);
   } else stopVoice();
 }
 /** Re-renders and puts focus back on the same control, so typing and keyboard use are not interrupted. */
@@ -154,7 +156,8 @@ async function runSearch(query: string): Promise<void> {
   try {
     const runtime = await findRuntime();
     const translation = ui.find.translation;
-    const found = await runtime.search(q, translation);
+    const meaning = await meaningHits(q, () => findStatus('Starting meaning search on this device…'));
+    const found = await runtime.search(q, translation, meaning);
     ui.find.shown = await runtime.show(found, translation);
     ui.find.found = found;
     ui.state.searches = rememberSearch(ui.state.searches, q);
@@ -343,6 +346,7 @@ app.addEventListener('click', event => {
   if (action === 'browse-bibles') return biblePicker.open(ui.state.preferences.translation, ui.state.preferences.filter);
   if (action === 'add-personal') return preferencesDialog.open('personal');
   if (action === 'find-voice' || action?.startsWith('voice-')) return void voiceAction(action, voiceHost);
+  if (action?.startsWith('meaning-')) return void meaningAction(action, voiceHost);
   if (Object.keys(button.dataset).some(key => key.startsWith('find'))) return void findAction(button);
   if (action === 'find-clear-history') {
     delete ui.state.searches;

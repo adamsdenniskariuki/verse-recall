@@ -192,6 +192,24 @@ const cases = [
     'if (!voice.downloaded) {', 'if (false) {', 'browser'],
   ['handles a blocked microphone and passes an accessibility sweep', 'src/voice/voice.ts',
     "speechError(error instanceof DOMException ? error.name : '')", "speechError('')", 'browser'],
+  ['meaning scores map similarity into confidence and agree with other strategies', 'src/search/rank.ts',
+    'Math.max(0, Math.min(1, (similarity - MEANING_FLOOR) / (MEANING_CEIL - MEANING_FLOOR)))', '(similarity - MEANING_FLOOR) / (MEANING_CEIL - MEANING_FLOOR)'],
+  ['meaning hits with no similarity add nothing to the ranking', 'src/search/rank.ts',
+    "return score > 0 ? [{ ordinal: hit.ordinal, score, strategy: 'meaning' as const }] : [];", "return [{ ordinal: hit.ordinal, score, strategy: 'meaning' as const }];"],
+  ['meaning index rejects incomplete data and ranks by similarity', 'src/semantic/vectors.ts',
+    'if (length) for (let j = 0; j < MEANING_REDUCED; j++) out[j] /= length;', ''],
+  ['meaning index rejects incomplete data and ranks by similarity', 'src/semantic/vectors.ts',
+    'shards.some((s, i) => s.length !== MEANING_REDUCED * Math.min(MEANING_SHARD_ROWS, MEANING_COUNT - i * MEANING_SHARD_ROWS))', 'false'],
+  ['meaning search reaches the golden thresholds alone and merged with the other strategies', 'src/semantic/vectors.ts',
+    'const similarity = dot * scale;', 'const similarity = dot;'],
+  ['meaning search files are pinned, served with the app and of a reasonable size', 'src/semantic/models.ts',
+    'new URL(`meaning/${MEANING_INDEX}/${file.name}`, origin).href', 'new URL(`/meaning/${MEANING_INDEX}/${file.name}`, origin).href'],
+  ['meaning search downloads only after consent, ranks paraphrases and can be removed', 'src/main.ts',
+    'const found = await runtime.search(q, translation, meaning);', 'const found = await runtime.search(q, translation);', 'browser'],
+  ['meaning search downloads only after consent, ranks paraphrases and can be removed', 'src/find-meaning.ts',
+    'if (!ui.find.meaning.downloaded || ui.find.meaning.phase', 'if (ui.find.meaning.phase', 'browser'],
+  ['meaning search consent passes an accessibility sweep and explains unsupported browsers', 'src/semantic/meaning.ts',
+    "typeof WebAssembly === 'object' && ", '', 'browser'],
 ];
 await mkdir('verification', { recursive: true });
 const report = [];
@@ -204,7 +222,7 @@ function run(name, browser) {
     ? ['node_modules/@playwright/test/cli.js', 'test', '--config', 'playwright.pages.config.ts', '--grep', `${name}$`]
     : browser
     ? ['node_modules/@playwright/test/cli.js', 'test', '--grep', `${name}$`]
-    : ['node_modules/tsx/dist/cli.mjs', '--test', '--test-name-pattern', `^${name}$`, 'tests/engine.test.ts', 'tests/search.test.ts', 'tests/voice.test.ts'];
+    : ['node_modules/tsx/dist/cli.mjs', '--test', '--test-name-pattern', `^${name}$`, 'tests/engine.test.ts', 'tests/search.test.ts', 'tests/voice.test.ts', 'tests/meaning.test.ts'];
   const result = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 180_000 });
   if (result.error) throw result.error;
   return { exit: result.status, output: result.stdout + result.stderr, command: `node ${args.join(' ')}` };

@@ -6,8 +6,8 @@
 .find-row .mic { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 8px 18px; }
 .find-row .mic.recording { border: 2px solid var(--cp-danger); font-weight: 700; }
 .find-row .mic svg { flex: none; }
-.voice-note { max-width: 760px; margin: 12px 0 0; }
-.voice-note .text-button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; vertical-align: middle; background: transparent; border-color: transparent; font-size: inherit; }
+.voice-note, .meaning-note { max-width: 760px; margin: 12px 0 0; }
+.voice-note .text-button, .meaning-note .text-button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; vertical-align: middle; background: transparent; border-color: transparent; font-size: inherit; }
 .voice-panel { max-width: 760px; margin: 16px 0 0; padding: 20px; border: 1px solid var(--cp-border-strong); border-radius: 16px; background: var(--cp-bg-elevated); }
 .voice-panel h2 { margin: 0 0 8px; font-family: var(--font-ui, inherit); font-size: 1.1rem; font-weight: 700; letter-spacing: 0; }
 .voice-panel .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }

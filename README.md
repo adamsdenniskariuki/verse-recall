@@ -31,8 +31,10 @@ flowchart LR
   T --> Q[Typed words or reference]
   Q --> R[Reference parser]
   Q --> K[Fuzzy keyword index]
+  Q -.->|optional download| E[Meaning: on-device embeddings]
   R --> M[Merge and rank]
   K --> M
+  E --> M
   M --> V[Top matches with context]
 ```
 
@@ -74,6 +76,30 @@ onnxruntime-web WASM runtime (MIT) from jsDelivr. Files are kept in the `verse-r
 cache only after they pass their checks, so private voice then works offline. The engine
 reads only that cache, re-verifies it before use and never fetches at run time. Recording
 stops after 30 seconds. Find a verse can remove the download.
+
+### Meaning search
+
+Optional and off until the user taps **Turn on meaning search** in Find a verse and agrees to
+a one-time download (about 58 MB). It then finds verses that say the same thing in other words
+(“arrogance comes before a downfall” → Proverbs 16:18) and is merged into the ranking as **Meaning**.
+
+- **Model:** [BAAI bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) (MIT), the
+  8-bit ONNX export [Xenova/bge-small-en-v1.5](https://huggingface.co/Xenova/bge-small-en-v1.5)
+  at a pinned commit (34 MB), run in a worker with the same transformers.js/ONNX runtime as
+  private voice (about 15 MB, reused when private voice is already downloaded).
+- **Verse vectors** (`public/meaning/<id>/`, served with the app, 8.5 MB): one vector per
+  verse, the mean of its WEB British, BSB and KJV embeddings (so KJV adds no size), reduced from
+  384 to 256 dimensions by PCA and stored as int8 with a per-verse scale, in shards of 4,096 verses.
+- **Build:** `pip install onnxruntime tokenizers numpy`, then `python tools/build_meaning_index.py`
+  (about 6 minutes, in parallel single-threaded processes with fixed batches, so output is reproducible). It writes the vectors,
+  `src/semantic/version.ts` and `tests/fixtures/meaning-queries.json` (query embeddings for the
+  golden tests). Rebuild it whenever the keyword index changes; a unit test checks this.
+- **Integrity and privacy:** every file is pinned by SHA-256 (`src/semantic/models.ts`), stored in
+  the `verse-recall-meaning` cache only after it passes, and read only from that cache, so meaning
+  search works offline and queries never leave the device.
+- **Quality:** `GOLDEN_MEANING` holds 16 paraphrases with few shared words. Top-3 accuracy:
+  15/16 merged (keywords alone 10/16), and the main golden set stays at 44/44. “lamp for my feet”
+  ranks Psalm 119:105 first.
 
 ## Run locally
 
@@ -198,7 +224,7 @@ Vanilla TypeScript + Vite, with no UI framework or runtime dependencies.
 |---|---|
 | Controller and screens | `src/main.ts`, `src/ui.ts`, `src/views/*` (shell, today/library/review/progress, plans, practice) |
 | Learning engine | `src/engine.ts` (stages, hints, scoring, review intervals), `src/journey.ts` (streaks, XP, badges) |
-| Find a verse | `src/search/*` (lazy chunk), `src/views/find.ts`, `tools/build-search-index.ts`; voice in `src/find-voice.ts` and `src/voice/*` (lazy chunk and worker) |
+| Find a verse | `src/search/*` (lazy chunk), `src/views/find.ts`, `tools/build-search-index.ts`; voice in `src/find-voice.ts` and `src/voice/*` (lazy chunk and worker); meaning search in `src/find-meaning.ts`, `src/semantic/*` (lazy chunk and worker) and `tools/build_meaning_index.py` |
 | Content | `src/content.ts`, `src/plans.ts`, `src/bible-catalog.ts`, `src/bible-picker.ts` |
 | Saves and transfer | `src/store.ts` (validation, migration), `src/transfer.ts`, `src/personal.ts`, `src/preferences.ts` |
 | Look and sound | `src/theme.ts`, `src/styles/*.css`, `src/speech.ts`, `src/assets/verse-recall-mark.svg` |

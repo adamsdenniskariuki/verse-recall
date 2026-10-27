@@ -6,6 +6,7 @@ import { localDay } from '../src/journey';
 import { makePersonal } from '../src/personal';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { loadIndex } from './search-helpers';
 
 async function preferences(page: Page) {
   if (!await page.locator('#preferences-dialog').isVisible()) await page.locator('#open-preferences').click();
@@ -1320,6 +1321,98 @@ test.describe('private voice', () => {
     await expect(page.locator('#find-status')).toHaveClass(/error/);
     await expect(page.locator('[data-action="find-voice"]')).toBeFocused();
   });
+});
+
+// A stand-in for the meaning worker: the real model and vectors download about 58 MB, which the CI suite must not do.
+const PSALM_119_105 = loadIndex().table.ordinal('PSA', 119, 105)!;
+const FAKE_MEANING = `let downloaded = false;
+self.onmessage = event => {
+  const request = event.data;
+  if (!request.base) return postMessage({ type: 'error', message: 'No base URL.' });
+  if (request.type === 'check') postMessage({ type: 'status', downloaded });
+  if (request.type === 'download') {
+    postMessage({ type: 'progress', loaded: 29, total: 58 });
+    setTimeout(() => { downloaded = true; postMessage({ type: 'downloaded' }); }, 400);
+  }
+  if (request.type === 'search') {
+    postMessage({ type: 'preparing' });
+    setTimeout(() => postMessage({ type: 'hits', hits: [{ ordinal: ${PSALM_119_105}, similarity: 0.8 }] }), 100);
+  }
+};`;
+
+test('meaning search downloads only after consent, ranks paraphrases and can be removed', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/meaning.worker*', route => route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_MEANING }));
+  await openFind(page);
+  const query = "god's word guides where I walk";
+  await page.locator('#find-query').fill(query);
+  await page.locator('#find-query').press('Enter');
+  await expect(page.locator('#find-status')).toContainText(/found|No verses/);
+  await expect(page.locator('.find-score').filter({ hasText: 'Meaning' })).toHaveCount(0);
+
+  const note = page.locator('.meaning-note');
+  await expect(note).toContainText('Turn on meaning search');
+  await expect(note).toContainText(/about \d+ MB/);
+  await note.locator('[data-action="meaning-offer"]').click();
+  await expect(page.locator('#meaning-consent-title')).toHaveText('Download meaning search?');
+  await expect(page.locator('.meaning-panel')).toContainText('Your searches never leave this device.');
+  await expect(page.locator('[data-action="meaning-download"]')).toBeFocused();
+  await page.locator('.meaning-panel [data-action="meaning-cancel"]').click();
+  await expect(page.locator('#find-status')).toContainText('Meaning search was not downloaded');
+  await expect(page.locator('.meaning-panel')).toHaveCount(0);
+
+  await page.locator('[data-action="meaning-offer"]').click();
+  await page.locator('[data-action="meaning-download"]').click();
+  await expect(page.locator('#meaning-progress')).toHaveAttribute('value', '50');
+  await expect(page.locator('#meaning-progress-text')).toHaveText('50%');
+  await expect(page.locator('#find-status')).toContainText('Meaning search is ready');
+  await expect(page.locator('#find-query')).toBeFocused();
+  await expect(note).toContainText('Meaning search is on, private and available offline.');
+
+  await page.locator('#find-query').press('Enter');
+  const best = page.locator('.find-result').first();
+  await expect(best.locator('h3')).toHaveText('Psalm 119:105');
+  await expect(best.locator('.find-score')).toContainText('Meaning');
+  await expect(page.locator('#find-status')).toContainText('Best match: Psalm 119:105.');
+  await page.locator('.find-help summary').click();
+  await expect(page.locator('.find-diagram')).toContainText('Meaning (optional download)');
+
+  // Kept across visits to Find.
+  await page.locator('nav [data-nav="today"]').click();
+  await page.locator('nav [data-nav="find"]').click();
+  await expect(note).toContainText('Meaning search is on');
+
+  await page.locator('[data-action="meaning-remove"]').click();
+  await expect(page.locator('#find-status')).toHaveText('Meaning search was removed from this device.');
+  await expect(note).toContainText('Turn on meaning search');
+  expect(errors).toEqual([]);
+});
+
+test('meaning search consent passes an accessibility sweep and explains unsupported browsers', async ({ page }) => {
+  await page.route('**/meaning.worker*', route => route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_MEANING }));
+  await page.setViewportSize({ width: 360, height: 800 });
+  await openFind(page);
+  await page.locator('[data-action="meaning-offer"]').click();
+  await expect(page.locator('[data-action="meaning-download"]')).toHaveText(/^Download \d+ MB$/);
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForTimeout(300); // let colour transitions finish before measuring contrast
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await axeViolations(page), colorScheme).toEqual([]);
+  }
+  await page.screenshot({ path: 'verification/find-meaning-consent-360.png', fullPage: true });
+  await page.locator('[data-action="meaning-download"]').click();
+  await expect(page.locator('#meaning-progress')).toBeVisible();
+  expect(await axeViolations(page)).toEqual([]);
+  await page.locator('[data-action="meaning-cancel"]').click();
+  await expect(page.locator('#find-status')).toContainText('Download cancelled');
+
+  await page.addInitScript(() => { delete (window as unknown as { WebAssembly?: unknown }).WebAssembly; });
+  await openFind(page);
+  await page.locator('[data-action="meaning-offer"]').click();
+  await expect(page.locator('#find-status')).toContainText('Meaning search is not supported in this browser.');
+  await expect(page.locator('#find-status')).toHaveClass(/error/);
 });
 
 test('find a verse reports a broken search index', async ({ page }) => {

@@ -50,3 +50,28 @@ export const GOLDEN: readonly [query: string, expected: readonly string[]][] = [
 ];
 /** The golden set must keep at least this share of expected verses in the top three. */
 export const GOLDEN_TOP3_THRESHOLD = 0.85;
+
+/**
+ * Paraphrases that share few words with any translation, so they need meaning search.
+ * Used together with GOLDEN to measure meaning search and the merged ranking.
+ */
+export const GOLDEN_MEANING: readonly [query: string, expected: readonly string[]][] = [
+  ["god's word guides where I walk", ['PSA 119:105']],
+  ["don't worry about tomorrow, it has enough troubles of its own", ['MAT 6:34']],
+  ['god will never abandon you', ['HEB 13:5', 'DEU 31:6', 'DEU 31:8', 'JOS 1:5']],
+  ['treat other people the way you want them to treat you', ['MAT 7:12', 'LUK 6:31']],
+  ['saved by grace as a gift, not because of good deeds', ['EPH 2:8', 'EPH 2:9']],
+  ['god is close to people whose hearts are broken', ['PSA 34:18', 'PSA 147:3']],
+  ['the lord will fight for you, you just need to stay calm', ['EXO 14:14']],
+  ['your body is a temple of the holy spirit', ['1CO 6:19']],
+  ['arrogance comes before a downfall', ['PRO 16:18']],
+  ['whatever job you do, work hard as if for the lord', ['COL 3:23']],
+  ['greed for money causes all kinds of evil', ['1TI 6:10']],
+  ['nothing is too hard for god', ['LUK 1:37', 'JER 32:17', 'JER 32:27', 'MAT 19:26', 'GEN 18:14']],
+  ['love god with everything you have', ['MAT 22:37', 'MAR 12:30', 'DEU 6:5', 'LUK 10:27']],
+  ['he heals the brokenhearted and bandages their wounds', ['PSA 147:3']],
+  ['god disciplines the people he loves', ['HEB 12:6', 'PRO 3:12', 'REV 3:19']],
+  ['ask and you will receive, knock and the door opens', ['MAT 7:7', 'LUK 11:9']],
+];
+/** Meaning search, merged with the other strategies, must keep at least this share in the top three. */
+export const MEANING_TOP3_THRESHOLD = 0.85;
