@@ -103,7 +103,7 @@ const cases = [
   ['welcome tour invites new visitors, walks every section and can be replayed', 'src/main.ts',
     "try { storage.setItem(TOUR_KEY, '1'); }", 'try { void TOUR_KEY; }', 'browser'],
   ['every section fits phones, tablets and desktops', 'src/styles/views.css',
-    'grid-template-columns: repeat(5, minmax(0, 1fr));', 'grid-template-columns: repeat(5, 120px);', 'browser'],
+    'grid-template-columns: repeat(6, minmax(0, 1fr));', 'grid-template-columns: repeat(6, 120px);', 'browser'],
   ['streaks, freezes and XP follow local days gently', 'src/journey.ts',
     'else if (missed <= freezes) { frozen = missed; freezes -= missed; current++; }', 'else if (missed <= freezes) { frozen = missed; current++; }'],
   ['streaks, freezes and XP follow local days gently', 'src/journey.ts',
@@ -144,6 +144,32 @@ const cases = [
     '${openInLinks(passage.reference, this.openIn())}', '${openInLinks(passage.reference)}', 'browser'],
   ['progress for every starter fits beside a full personal library', 'src/store.ts',
     'MAX_PERSONAL + official.length + passages.length', 'MAX_PERSONAL + official.length + 6'],
+  ['reference parser reads written and spoken references', 'src/search/reference.ts',
+    'else if (ROMAN.test(t)) {', 'else if (false) {'],
+  ['reference parser ignores ordinary words and impossible verses', 'src/search/reference.ts',
+    '(c.verse === undefined || table.ordinal(book, c.chapter, c.verse) !== undefined)', 'true'],
+  ['normaliser folds archaic forms, stems and sound-alikes', 'src/search/normalize.ts',
+    "hath: 'has', hast: 'has'", "hath: 'hath', hast: 'has'"],
+  ['keyword search tolerates typos, mishearing and King James wording', 'src/search/normalize.ts',
+    "else if ((w.endsWith('eth') || w.endsWith('est')) && w.length > 5) w = w.slice(0, -3);", ''],
+  ['ranking merges strategies and rewards agreement', 'src/search/rank.ts',
+    'found.confidence = Math.max(found.confidence, c.score) + 0.05;', 'found.confidence = Math.max(found.confidence, c.score);'],
+  ['highlighting marks only matched words', 'src/search/find.ts',
+    'if (!wanted.has(stem(span.word))) continue;', 'if (!wanted.has(span.word)) continue;'],
+  ['postings round-trip and the committed index matches the Bible text', 'src/search/normalize.ts',
+    "'this those to up upon us was", "'this those to up us was"],
+  ['search history is bounded, validated and kept in backups', 'src/store.ts',
+    'return [q, ...history.filter(h => h !== q)].slice(0, MAX_SEARCHES);', 'return [q, ...history.filter(h => h !== q)];'],
+  ['search history is bounded, validated and kept in backups', 'src/transfer.ts',
+    '[...(next.searches ?? []), ...incoming.state.searches]', '[...incoming.state.searches, ...(next.searches ?? [])]'],
+  ['find a verse by phrase, typo or spoken reference and act on the results', 'src/main.ts',
+    'ui.state.searches = rememberSearch(ui.state.searches, q);', '', 'browser'],
+  ['find a verse reports a broken search index', 'src/search/load.ts',
+    "if (await digest(bytes) !== hash) throw", 'if (false) throw', 'browser'],
+  ['find a verse passes an accessibility sweep in light and dark at phone width', 'src/views/find.ts',
+    'aria-label="Add to my verses: ${e(shown.reference)}"', 'aria-label="Add ${e(shown.reference)} to my verses"', 'browser'],
+  ['find a verse keeps working offline after the first search', 'tools/service-worker.js',
+    'if (isSearch(url.pathname)) return event.respondWith(cacheFirst(request, SEARCH_CACHE));', '', 'pages'],
 ];
 await mkdir('verification', { recursive: true });
 const report = [];
@@ -156,7 +182,7 @@ function run(name, browser) {
     ? ['node_modules/@playwright/test/cli.js', 'test', '--config', 'playwright.pages.config.ts', '--grep', `${name}$`]
     : browser
     ? ['node_modules/@playwright/test/cli.js', 'test', '--grep', `${name}$`]
-    : ['node_modules/tsx/dist/cli.mjs', '--test', '--test-name-pattern', `^${name}$`, 'tests/engine.test.ts'];
+    : ['node_modules/tsx/dist/cli.mjs', '--test', '--test-name-pattern', `^${name}$`, 'tests/engine.test.ts', 'tests/search.test.ts'];
   const result = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 180_000 });
   if (result.error) throw result.error;
   return { exit: result.status, output: result.stdout + result.stderr, command: `node ${args.join(' ')}` };

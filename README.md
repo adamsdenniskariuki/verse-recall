@@ -12,6 +12,9 @@ Live at **<https://verserecall.madebyfavor.com/>**.
   whole 66-book Bible in **WEB British**, **BSB** and the **KJV** via a book/chapter/verse picker.
   You can also add personal passages. Official passages have **Open in** links to the same
   reference on Bible Gateway (NKJV, AMP, MSG, NLT, ESV); pick your preferred one in Settings.
+- **Find a verse:** type a half-remembered phrase, a few words or a reference (“John three
+  sixteen”, “1 Cor 13 4”, “psalm xxiii”) and get ranked matches with highlighted words, nearby
+  verses and a WEB/BSB/KJV toggle. See [Find a verse](#find-a-verse).
 - **Rhythm:** spaced reviews, gentle streaks with saved streak freezes, XP and badges.
 - **Comfort:** serif scripture with a clean interface, a dyslexia-friendly reading font,
   several colour themes, light/dark mode that follows the system, and optional
@@ -19,6 +22,34 @@ Live at **<https://verserecall.madebyfavor.com/>**.
 - **Private and offline:** no account, analytics or backend. Progress stays in browser
   storage. The app installs as a PWA, and the Bible chapters you open are cached for
   offline use. A versioned JSON backup moves progress between devices.
+
+## Find a verse
+
+```mermaid
+flowchart LR
+  Q[Typed words or reference] --> R[Reference parser]
+  Q --> K[Fuzzy keyword index]
+  R --> M[Merge and rank]
+  K --> M
+  M --> V[Top matches with context]
+```
+
+- **Reference parser** (`src/search/reference.ts`): written and spoken forms, abbreviations,
+  ordinals (“first”, “1st”, “I”), Roman numerals, number words (“one nineteen one oh five”),
+  ranges, and typo-tolerant book names. Impossible verses are ignored.
+- **Keyword index** (`src/search/keyword.ts`, `normalize.ts`): one index over WEB British, BSB
+  and KJV. Words are stemmed, archaic forms are folded (thee/thou/hath/-eth), and typos and
+  sound-alike words (“feat” → “feet”) still match. Words that appear together in order rank higher.
+- **Ranking** (`src/search/rank.ts`): results are merged; a verse found by more than one strategy
+  gets a small bonus. Each result shows a confidence and which strategy found it.
+- **Build:** `npm run build:search` (`tools/build-search-index.ts`) writes
+  `public/search/<id>/` (meta 128 KB + postings 645 KB; about 565 KB gzipped) and
+  `src/search/version.ts`. The app verifies both files by SHA-256, and the service worker keeps
+  them for offline use. A unit test fails if the committed index is stale.
+- **Quality:** `tests/search-golden.ts` holds 44 paraphrase → verse cases; the unit suite
+  requires 85% top-3 accuracy (currently 44/44).
+- **Privacy:** search runs entirely on the device. Recent searches (up to 20) are stored
+  locally and included in backups; older backups without them still import.
 
 ## Run locally
 
@@ -86,7 +117,7 @@ existing saves and backups depend on them:
 Later additions are optional keys with explicit validation, so older saves load unchanged.
 These additions are appearance flags (unchosen defaults move to the new look; explicit
 choices, including Consolas or Purple, are kept), plan progress, the welcome tour and the
-`journey` (streak/XP). Damaged saves are never silently replaced: the user sees a notice and
+`journey` (streak/XP) and `searches` (Find a verse history). Damaged saves are never silently replaced: the user sees a notice and
 must choose to replace. Imports are fully validated, previewed and merged conservatively
 before confirmation.
 
@@ -143,6 +174,7 @@ Vanilla TypeScript + Vite, with no UI framework or runtime dependencies.
 |---|---|
 | Controller and screens | `src/main.ts`, `src/ui.ts`, `src/views/*` (shell, today/library/review/progress, plans, practice) |
 | Learning engine | `src/engine.ts` (stages, hints, scoring, review intervals), `src/journey.ts` (streaks, XP, badges) |
+| Find a verse | `src/search/*` (lazy chunk), `src/views/find.ts`, `tools/build-search-index.ts` |
 | Content | `src/content.ts`, `src/plans.ts`, `src/bible-catalog.ts`, `src/bible-picker.ts` |
 | Saves and transfer | `src/store.ts` (validation, migration), `src/transfer.ts`, `src/personal.ts`, `src/preferences.ts` |
 | Look and sound | `src/theme.ts`, `src/styles/*.css`, `src/speech.ts`, `src/assets/verse-recall-mark.svg` |

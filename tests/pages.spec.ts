@@ -65,4 +65,24 @@ test.describe('installable offline app', () => {
     await expect(page.getByRole('alert')).toHaveCount(0);
     await context.setOffline(false);
   });
+
+  test('find a verse keeps working offline after the first search', async ({ page, context }) => {
+    await page.goto('./');
+    await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+    await page.reload();
+    await page.locator('nav [data-nav="find"]').click();
+    await page.locator('#find-query').fill('lamp for my feet');
+    await page.locator('#find-query').press('Enter');
+    await expect(page.locator('.find-result h3').first()).toHaveText('Psalm 119:105');
+    await context.setOffline(true);
+    await page.reload().catch(() => undefined);
+    await page.locator('nav [data-nav="find"]').click();
+    await page.locator('#find-query').fill('John three sixteen');
+    await page.locator('#find-query').press('Enter');
+    await expect(page.locator('.find-result h3').first()).toHaveText('John 3:16');
+    await page.locator('[data-find-query="lamp for my feet"]').first().click();
+    await expect(page.locator('.find-result h3').first()).toHaveText('Psalm 119:105');
+    await expect(page.locator('.find-result blockquote').first()).toContainText('lamp');
+    await context.setOffline(false);
+  });
 });

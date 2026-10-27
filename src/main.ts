@@ -2,16 +2,17 @@ import './styles/index.css';
 import { collectionName } from './content';
 import { DEFAULT_OPEN_IN } from './open-in';
 import { activeIndices, bankCorrect, finish, hint, letterHint, nextStage, normalizeWord, placeToken, startRun, type Run } from './engine';
-import { choose, LEGACY_STORAGE_KEY, loadState, saveState, STORAGE_KEY, type StoragePort } from './store';
+import { choose, LEGACY_STORAGE_KEY, loadState, rememberSearch, saveState, STORAGE_KEY, type StoragePort } from './store';
 import { escapeHtml as e } from './html';
 import { PreferencesDialog } from './preferences';
-import { bibleSelectionKey, MAX_OFFICIAL, resolveBibleSelection, type BibleSelection } from './bible-catalog';
+import { bibleSelectionKey, MAX_OFFICIAL, resolveBibleSelection, snapshotFor, type BibleSelection, type BibleTranslation } from './bible-catalog';
 import { BiblePicker } from './bible-picker';
 import { installTheme } from './theme';
 import { planSelection, plans, planTranslation, verseOfTheDay } from './plans';
-import { provider, runPassage, ui, type View } from './ui';
+import { plural, provider, runPassage, ui, type View } from './ui';
 import { library, progress, review, today } from './views/home';
 import { plansView } from './views/plans';
+import { findView } from './views/find';
 import { listenLabel, practice } from './views/practice';
 import { earnedBadges, recordPractice } from './journey';
 import { speak, speaking, stopSpeaking } from './speech';
@@ -43,6 +44,7 @@ Object.assign(ui, {
   tour: null,
   reward: null,
   tourInvite: !tourSeen && !loaded.state.run && Object.keys(loaded.state.progress).length === 0,
+  find: { query: '', translation: planTranslation(loaded.state.preferences.translation), busy: false, status: null, found: null, shown: [] },
 });
 const media = matchMedia('(prefers-color-scheme: dark)');
 
@@ -87,6 +89,7 @@ function page(): string {
   }
   switch (ui.view) {
     case 'plans': return plansView();
+    case 'find': return findView();
     case 'library': return library();
     case 'review': return review();
     case 'progress': return progress();
@@ -105,6 +108,111 @@ function go(view: View): void {
   ui.view = view;
   ui.loading = null;
   ui.plan = null;
+  // Start downloading the offline search index as soon as Find opens.
+  if (view === 'find') void findRuntime().then(m => m.preload()).catch(() => undefined);
+}
+/** Re-renders and puts focus back on the same control, so typing and keyboard use are not interrupted. */
+function renderKeepingFocus(): void {
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const attr = active && [...active.attributes].find(a => a.name.startsWith('data-find') || a.name === 'data-action');
+  const selector = active?.id ? `#${CSS.escape(active.id)}` : attr ? `[${attr.name}="${CSS.escape(attr.value)}"]` : null;
+  render();
+  if (selector) document.querySelector<HTMLElement>(selector)?.focus();
+}
+
+type FindRuntime = typeof import('./search/find');
+let findLoading: Promise<FindRuntime> | null = null;
+/** The search code and index load only when Find a verse is used. */
+function findRuntime(): Promise<FindRuntime> {
+  findLoading ??= import('./search/find');
+  findLoading.catch(() => { findLoading = null; });
+  return findLoading;
+}
+/** Updates the Find status and re-announces it to screen readers. */
+function findStatus(message: string, error = false): void {
+  ui.find.status = { message, error };
+  if (ui.view !== 'find') return;
+  renderKeepingFocus();
+  const node = document.querySelector('#find-status');
+  if (!node) return;
+  node.textContent = '';
+  setTimeout(() => { if (node.isConnected) node.textContent = message; }, 60);
+}
+const failure = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
+async function runSearch(query: string): Promise<void> {
+  const q = query.trim();
+  ui.find.query = query;
+  if (!q) return findStatus('Type a few words, a phrase or a reference to search.', true);
+  if (ui.find.busy) return;
+  ui.find.busy = true;
+  findStatus(`Searching for “${q}”…`);
+  try {
+    const runtime = await findRuntime();
+    const translation = ui.find.translation;
+    const found = await runtime.search(q, translation);
+    ui.find.shown = await runtime.show(found, translation);
+    ui.find.found = found;
+    ui.state.searches = rememberSearch(ui.state.searches, q);
+    persist();
+    ui.find.busy = false;
+    findStatus(found.length ? `${plural(found.length, 'verse')} found. Best match: ${ui.find.shown[0].reference}.` : `No verses matched “${q}”.`);
+  } catch (error) {
+    ui.find.busy = false;
+    findStatus(failure(error, 'Search failed. Please try again.'), true);
+  }
+}
+function foundSelection(index: number): { selection: BibleSelection; reference: string } | null {
+  const f = ui.find.found?.[index];
+  const shown = ui.find.shown[index];
+  if (!f || !shown) return null;
+  const translation = ui.find.translation;
+  return { selection: { snapshot: snapshotFor(translation), translation, book: f.book, chapter: f.chapter, start: f.verse, end: f.end ?? f.verse }, reference: shown.reference };
+}
+const shownText = (index: number) => ui.find.shown[index]?.parts.map(p => p.text).join('') ?? '';
+const TRANSLATION_NAMES: Record<BibleTranslation, string> = { webbe: 'WEB British', bsb: 'BSB', kjv: 'KJV' };
+async function findAction(button: HTMLElement): Promise<void> {
+  const data = button.dataset;
+  if (data.findQuery !== undefined) {
+    ui.find.query = data.findQuery;
+    return runSearch(data.findQuery);
+  }
+  if (data.findTranslation) {
+    ui.find.translation = data.findTranslation as BibleTranslation;
+    const name = TRANSLATION_NAMES[ui.find.translation];
+    if (!ui.find.found?.length) return findStatus(`Results will show in the ${name}.`);
+    try {
+      ui.find.shown = await (await findRuntime()).show(ui.find.found, ui.find.translation);
+      findStatus(`Showing results in the ${name}.`);
+    } catch (error) { findStatus(failure(error, 'This translation could not be loaded.'), true); }
+    return;
+  }
+  const index = Number(data.findPractise ?? data.findAdd ?? data.findOpen ?? data.findCopy ?? data.findShare);
+  const chosen = foundSelection(index);
+  if (!chosen) return;
+  const { selection, reference } = chosen;
+  if (data.findOpen !== undefined) return biblePicker.open(selection.translation, 'both', selection);
+  if (data.findPractise !== undefined || data.findAdd !== undefined) {
+    try {
+      await resolveBibleSelection(selection);
+    } catch (error) { return findStatus(failure(error, `${reference} could not be opened.`), true); }
+    if (data.findPractise !== undefined) return practiseSelection(selection, reference);
+    try {
+      const added = addOfficial(selection);
+      if (added) persist();
+      findStatus(added ? `${reference} added to your library. Practise it any time from Library.` : `${reference} is already in your library.`);
+    } catch (error) { findStatus(failure(error, 'This passage could not be added.'), true); }
+    return;
+  }
+  const text = `${shownText(index)}\n— ${reference} (${TRANSLATION_NAMES[selection.translation]})`;
+  if (data.findCopy !== undefined) {
+    try {
+      await navigator.clipboard.writeText(text);
+      findStatus(`${reference} copied.`);
+    } catch { findStatus('Copying is not available in this browser. Select the verse text to copy it instead.', true); }
+    return;
+  }
+  try { await navigator.share({ title: reference, text }); }
+  catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) findStatus('Sharing is not available here. Use Copy instead.', true); }
 }
 
 function start(key: string, mode: Run['mode']): void {
@@ -220,6 +328,14 @@ app.addEventListener('click', event => {
   if (action === 'preferences') return preferencesDialog.open();
   if (action === 'browse-bibles') return biblePicker.open(ui.state.preferences.translation, ui.state.preferences.filter);
   if (action === 'add-personal') return preferencesDialog.open('personal');
+  if (Object.keys(button.dataset).some(key => key.startsWith('find'))) return void findAction(button);
+  if (action === 'find-clear-history') {
+    delete ui.state.searches;
+    persist();
+    findStatus('Search history cleared.');
+    document.querySelector<HTMLElement>('#find-query')?.focus();
+    return;
+  }
   if (button.dataset.nav) {
     event.preventDefault();
     go(button.dataset.nav as View);
@@ -340,8 +456,15 @@ app.addEventListener('click', event => {
   if (!stageChanged) document.querySelector<HTMLElement>(`[data-action="${action}"]`)?.focus();
 });
 
+app.addEventListener('submit', event => {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-find-form')) return;
+  event.preventDefault();
+  void runSearch(form.querySelector<HTMLInputElement>('#find-query')!.value);
+});
 app.addEventListener('input', event => {
   const target = event.target;
+  if (target instanceof HTMLInputElement && target.id === 'find-query') ui.find.query = target.value;
   if (target instanceof HTMLTextAreaElement && target.id === 'answer' && ui.state.run) {
     ui.state.run.answer = target.value;
     persist();

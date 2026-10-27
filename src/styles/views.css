@@ -59,13 +59,14 @@ nav .count { display: inline-grid; place-items: center; min-width: 22px; height:
 @media (max-width: 900px) {
   .header { grid-template-columns: 1fr auto; grid-template-areas: "brand preferences" "nav nav"; padding: 16px 0 12px; row-gap: 12px; }
   .header .brand { grid-area: brand; }
-  .header nav { grid-area: nav; justify-self: stretch; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .header nav { grid-area: nav; justify-self: stretch; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
   #open-preferences { grid-area: preferences; }
   .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
   .header nav { gap: 2px; }
   .header nav button { padding: 8px 2px; min-width: 0; font-size: .78rem; }
+  .header nav button { font-size: clamp(.68rem, 2.9vw, .78rem); }
   nav .count { margin-left: 2px; min-width: 18px; height: 18px; padding: 0 4px; font-size: .65rem; }
   .gear { display: none; }
   .page-head { padding: 32px 0 24px; }
