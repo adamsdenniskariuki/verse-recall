@@ -153,7 +153,7 @@ const cases = [
   ['keyword search tolerates typos, mishearing and King James wording', 'src/search/normalize.ts',
     "else if ((w.endsWith('eth') || w.endsWith('est')) && w.length > 5) w = w.slice(0, -3);", ''],
   ['ranking merges strategies and rewards agreement', 'src/search/rank.ts',
-    'found.confidence = Math.max(found.confidence, c.score) + 0.05;', 'found.confidence = Math.max(found.confidence, c.score);'],
+    'found.confidence = Math.max(found.confidence, c.score) + bonus;', 'found.confidence = Math.max(found.confidence, c.score) + 0;'],
   ['highlighting marks only matched words', 'src/search/find.ts',
     'if (!wanted.has(stem(span.word))) continue;', 'if (!wanted.has(span.word)) continue;'],
   ['postings round-trip and the committed index matches the Bible text', 'src/search/normalize.ts',
@@ -210,6 +210,22 @@ const cases = [
     'if (!ui.find.meaning.downloaded || ui.find.meaning.phase', 'if (ui.find.meaning.phase', 'browser'],
   ['meaning search consent passes an accessibility sweep and explains unsupported browsers', 'src/semantic/meaning.ts',
     "typeof WebAssembly === 'object' && ", '', 'browser'],
+  ['a topic search ranks the topic list first, in order, with ranges', 'src/search/rank.ts',
+    "c.strategy === 'topic' || found.strategies.includes('topic') ? 0 : 0.05", '0.05'],
+  ['remembered phrases and references are never taken as topics', 'src/search/topics.ts',
+    "if (!asked && rest.split(' ').length > 2) return null;", ''],
+  ['topic questions are recognised in many phrasings', 'src/search/topics.ts',
+    "editDistance(wanted, word, 2) <= (word.length >= 7 ? 2 : 1)", 'wanted === word'],
+  ['ordinary chatter detects nothing', 'src/live/detect.ts',
+    'const quote = matched >= MIN_QUOTE && (matched >= LONG_QUOTE || matched >= verse.length * 0.5);', 'const quote = matched >= MIN_SHORT;'],
+  ['wording repeated across the Bible is one detection, not many', 'src/live/detect.ts',
+    'if (best && !this.quotes.some(earlier => parallel(earlier, best.words))) {', 'if (best) {'],
+  ['a sermon transcript yields the quoted and referenced verses, once each', 'src/live/detect.ts',
+    'if (this.seen.has(ordinal)) return;', ''],
+  ['live mode lists verses quoted or referenced while listening', 'src/main.ts',
+    '} else { stopVoice(); stopLive(); }', '} else stopVoice();', 'browser'],
+  ['topics can be browsed or asked for and keep their curated order', 'src/views/find.ts',
+    '${topics()}', '', 'browser'],
 ];
 await mkdir('verification', { recursive: true });
 const report = [];
@@ -222,7 +238,7 @@ function run(name, browser) {
     ? ['node_modules/@playwright/test/cli.js', 'test', '--config', 'playwright.pages.config.ts', '--grep', `${name}$`]
     : browser
     ? ['node_modules/@playwright/test/cli.js', 'test', '--grep', `${name}$`]
-    : ['node_modules/tsx/dist/cli.mjs', '--test', '--test-name-pattern', `^${name}$`, 'tests/engine.test.ts', 'tests/search.test.ts', 'tests/voice.test.ts', 'tests/meaning.test.ts'];
+    : ['node_modules/tsx/dist/cli.mjs', '--test', '--test-name-pattern', `^${name}$`, 'tests/engine.test.ts', 'tests/search.test.ts', 'tests/voice.test.ts', 'tests/meaning.test.ts', 'tests/topics.test.ts', 'tests/live.test.ts'];
   const result = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 180_000 });
   if (result.error) throw result.error;
   return { exit: result.status, output: result.stdout + result.stderr, command: `node ${args.join(' ')}` };

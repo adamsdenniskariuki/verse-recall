@@ -1,9 +1,10 @@
 import type { VerseRef } from './index-format';
 import { phraseScore, type KeywordIndex } from './keyword';
 import { parseReferences } from './reference';
+import { matchTopic, topicHits } from './topics';
 
-export type Strategy = 'reference' | 'keyword' | 'meaning';
-export const STRATEGY_NAMES: Record<Strategy, string> = { reference: 'Reference', keyword: 'Keywords', meaning: 'Meaning' };
+export type Strategy = 'reference' | 'keyword' | 'meaning' | 'topic';
+export const STRATEGY_NAMES: Record<Strategy, string> = { reference: 'Reference', keyword: 'Keywords', meaning: 'Meaning', topic: 'Topic' };
 /** A verse the meaning model found, with its cosine similarity to the query. */
 export interface MeaningHit { ordinal: number; similarity: number }
 /** Similarities at or below this floor give no confidence; MEANING_CEIL and above give full confidence. */
@@ -41,8 +42,10 @@ export function mergeResults(lists: Candidate[][], ref: (ordinal: number) => Ver
       continue;
     }
     if (!found.strategies.includes(c.strategy)) {
+      // Topic lists are already in a chosen order, so keyword agreement must not reshuffle them.
+      const bonus = c.strategy === 'topic' || found.strategies.includes('topic') ? 0 : 0.05;
       found.strategies.push(c.strategy);
-      found.confidence = Math.max(found.confidence, c.score) + 0.05;
+      found.confidence = Math.max(found.confidence, c.score) + bonus;
     } else found.confidence = Math.max(found.confidence, c.score);
     found.terms = [...new Set([...found.terms, ...(c.terms ?? [])])];
     if (c.end && !found.end) found.end = c.end;
@@ -54,7 +57,7 @@ export function mergeResults(lists: Candidate[][], ref: (ordinal: number) => Ver
 }
 
 /**
- * Runs reference parsing and keyword search, refines the best keyword matches with phrase order, and ranks them
+ * Runs reference parsing, topic lookup and keyword search, refines the best keyword matches with phrase order, and ranks them
  * together with any meaning-search hits.
  */
 export async function findVerses(query: string, index: KeywordIndex, text: ChapterText, limit = 10, meaningHits: readonly MeaningHit[] = []): Promise<FoundVerse[]> {
@@ -62,18 +65,22 @@ export async function findVerses(query: string, index: KeywordIndex, text: Chapt
     const ordinal = index.table.ordinal(hit.book, hit.chapter, hit.verse);
     return ordinal === undefined ? [] : [{ ordinal, score: hit.confidence, strategy: 'reference' as const, end: hit.end, chapterOnly: hit.chapterOnly }];
   });
+  const topic = matchTopic(query);
+  const topical: Candidate[] = topic ? topicHits(topic, index.table).map(hit => ({ ...hit, strategy: 'topic' as const })) : [];
+  // A topic question ("verses about fear") is answered by its list first; keyword matches on the word itself follow.
+  const weight = topic ? 0.6 : 0.85;
   const hits = index.search(query, 40);
   const top = hits.slice(0, 15);
   const keyword: Candidate[] = await Promise.all(top.map(async hit => {
     const ref = index.ref(hit.ordinal);
     let phrase = 0;
     try { phrase = phraseScore(query, (await text(ref.book, ref.chapter))[ref.verse] ?? ''); } catch { /* offline: rank on keywords alone */ }
-    return { ordinal: hit.ordinal, score: 0.85 * hit.score + 0.12 * phrase, strategy: 'keyword' as const, terms: hit.terms };
+    return { ordinal: hit.ordinal, score: weight * hit.score + 0.12 * phrase, strategy: 'keyword' as const, terms: hit.terms };
   }));
-  const rest: Candidate[] = hits.slice(15).map(hit => ({ ordinal: hit.ordinal, score: 0.85 * hit.score, strategy: 'keyword', terms: hit.terms }));
+  const rest: Candidate[] = hits.slice(15).map(hit => ({ ordinal: hit.ordinal, score: weight * hit.score, strategy: 'keyword', terms: hit.terms }));
   const meaning: Candidate[] = meaningHits.flatMap(hit => {
     const score = meaningScore(hit.similarity);
     return score > 0 ? [{ ordinal: hit.ordinal, score, strategy: 'meaning' as const }] : [];
   });
-  return mergeResults([references, keyword, rest, meaning], ordinal => index.ref(ordinal), limit);
+  return mergeResults([references, topical, keyword, rest, meaning], ordinal => index.ref(ordinal), limit);
 }

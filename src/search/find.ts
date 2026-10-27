@@ -3,6 +3,7 @@ import { loadBibleEdition, readBibleChapter, type BibleTranslation } from '../bi
 import { loadKeywordIndex } from './load';
 import { stem, wordSpans } from './normalize';
 import { findVerses, type FoundVerse, type MeaningHit } from './rank';
+import { matchTopic } from './topics';
 
 export interface Segment { text: string; mark: boolean }
 export interface ShownVerse {
@@ -33,7 +34,7 @@ export const preload = () => loadKeywordIndex();
 
 export async function search(query: string, translation: BibleTranslation, meaning: readonly MeaningHit[] = []): Promise<FoundVerse[]> {
   const index = await loadKeywordIndex();
-  const found = await findVerses(query, index, (book, chapter) => readBibleChapter(translation, book, chapter), 6, meaning);
+  const found = await findVerses(query, index, (book, chapter) => readBibleChapter(translation, book, chapter), matchTopic(query) ? 10 : 6, meaning);
   return found.filter(f => f.confidence >= 0.2);
 }
 

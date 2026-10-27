@@ -19,7 +19,7 @@ export const MAX_RECORDING_MS = 30_000;
 interface Recognition extends EventTarget {
   lang: string; interimResults: boolean; continuous: boolean; maxAlternatives: number;
   start(): void; stop(): void; abort(): void;
-  onresult: ((event: { results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null;
+  onresult: ((event: { resultIndex?: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null;
   onerror: ((event: { error: string }) => void) | null;
   onend: (() => void) | null;
 }
@@ -137,11 +137,15 @@ async function samples(recording: Blob): Promise<Float32Array> {
   } finally { void context.close(); }
 }
 
+/** Asks for the microphone only when the user starts listening, and explains a refusal plainly. */
+async function microphone(): Promise<MediaStream> {
+  try { return await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } }); }
+  catch (error) { throw new Error(speechError(error instanceof DOMException ? error.name : '')); }
+}
+
 /** Private voice: records until stopped (or 30 seconds), then transcribes on this device. */
 export async function listenPrivately(model: PrivateModel, hooks: VoiceHooks): Promise<Listening> {
-  let stream: MediaStream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } }); }
-  catch (error) { throw new Error(speechError(error instanceof DOMException ? error.name : '')); }
+  const stream = await microphone();
   const recorder = new MediaRecorder(stream);
   let chunks: Blob[] = [];
   let cancelled = false;
@@ -168,5 +172,124 @@ export async function listenPrivately(model: PrivateModel, hooks: VoiceHooks): P
   return {
     stop: () => { if (recorder.state === 'recording') recorder.stop(); },
     cancel: () => { cancelled = true; if (recorder.state === 'recording') recorder.stop(); else release(); },
+  };
+}
+
+
+/** Live listening: finished pieces of transcript arrive one at a time, for as long as it runs. */
+export interface LiveHooks {
+  /** A finished piece of transcript. */
+  text(segment: string): void;
+  /** Words heard so far that are not finished yet (browser engine only). */
+  interim(text: string): void;
+  /** The private engine is loading or turning a piece of audio into text. */
+  working(busy: boolean): void;
+  error(message: string): void;
+  /** Listening has fully stopped and every piece has been handled. */
+  ended(): void;
+}
+/** Private live mode records this long before each piece is transcribed. */
+export const LIVE_CHUNK_MS = 8_000;
+
+/** Browser speech service, listening continuously. It restarts after pauses, as the service ends sessions on its own. */
+export function liveWithBrowser(hooks: LiveHooks): Listening {
+  const Api = speechApi();
+  if (!Api) throw new Error('This browser has no speech service. Choose private voice in Settings, or type instead.');
+  let recognition: Recognition;
+  let stopped = false;
+  const restarts: number[] = [];
+  const begin = () => {
+    const r = new Api();
+    recognition = r;
+    r.lang = 'en-GB';
+    r.interimResults = true;
+    r.continuous = true;
+    r.maxAlternatives = 1;
+    const sent = new Set<number>();
+    r.onresult = event => {
+      let interim = '';
+      for (let i = event.resultIndex ?? 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (!result.isFinal) interim += result[0].transcript;
+        else if (!sent.has(i)) { sent.add(i); hooks.text(result[0].transcript.trim()); }
+      }
+      hooks.interim(interim.trim());
+    };
+    r.onerror = event => {
+      if (stopped || event.error === 'no-speech' || event.error === 'aborted') return;
+      stopped = true;
+      hooks.error(speechError(event.error));
+    };
+    r.onend = () => {
+      if (stopped) return hooks.ended();
+      const now = Date.now();
+      restarts.push(now);
+      while (restarts.length && now - restarts[0] > 1_000) restarts.shift();
+      if (restarts.length >= 3) {
+        stopped = true;
+        hooks.error('The browser speech service keeps stopping. Live listening has ended; please try again.');
+        return hooks.ended();
+      }
+      begin();
+    };
+    r.start();
+  };
+  begin();
+  const end = () => { if (stopped) return; stopped = true; recognition.stop(); };
+  return { stop: end, cancel: () => { stopped = true; recognition.abort(); } };
+}
+
+/** Whisper hears silence as captions such as "[BLANK_AUDIO]" or "(music)"; those are not speech. */
+const spoken = (text: string) => text.replace(/\[[^\]]*\]|\([^)]*\)/gu, ' ').replace(/\s+/gu, ' ').trim();
+
+/**
+ * Private live mode: records successive pieces of audio and transcribes each on this device while the next is
+ * recorded. Every piece stays in memory only and is dropped once it has been turned into text.
+ */
+export async function livePrivately(model: PrivateModel, hooks: LiveHooks, chunkMs = LIVE_CHUNK_MS): Promise<Listening> {
+  const stream = await microphone();
+  let stopped = false;
+  let cancelled = false;
+  let recorder: MediaRecorder | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let queue = Promise.resolve();
+  const release = () => { clearTimeout(timer); stream.getTracks().forEach(track => track.stop()); };
+  const transcribe = async (piece: Blob) => {
+    if (cancelled || !piece.size) return;
+    hooks.working(true);
+    try {
+      const audio = await samples(piece);
+      const reply = unwrap(await ask({ type: 'transcribe', model, audio }, undefined, [audio.buffer]));
+      const text = reply.type === 'text' ? spoken(reply.text) : '';
+      if (text && !cancelled) hooks.text(text);
+    } catch (error) {
+      if (cancelled) return;
+      stopped = true;
+      cancelled = true;
+      if (recorder?.state === 'recording') recorder.stop();
+      release();
+      hooks.error(error instanceof Error ? error.message : 'Private voice could not understand the audio. Live listening has ended.');
+    } finally { hooks.working(false); }
+  };
+  const record = () => {
+    const r = new MediaRecorder(stream);
+    recorder = r;
+    const parts: Blob[] = [];
+    r.addEventListener('dataavailable', event => { if (event.data.size) parts.push(event.data); });
+    r.addEventListener('stop', () => {
+      const piece = new Blob(parts, { type: r.mimeType });
+      parts.length = 0;
+      if (!stopped) record();
+      else release();
+      queue = queue.then(() => transcribe(piece));
+      if (stopped) void queue.then(() => { if (!cancelled) hooks.ended(); });
+    });
+    r.start();
+    timer = setTimeout(() => { if (r.state === 'recording') r.stop(); }, chunkMs);
+  };
+  record();
+  return {
+    stop: () => { if (stopped) return; stopped = true; clearTimeout(timer); if (recorder?.state === 'recording') recorder.stop(); else release(); },
+    cancel: () => { stopped = true; cancelled = true; clearTimeout(timer); if (recorder?.state === 'recording') recorder.stop(); else release(); },
   };
 }
