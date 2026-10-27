@@ -39,7 +39,9 @@ function roman(token: string): number {
 }
 
 export function tokenize(text: string): string[] {
-  return text.normalize('NFKD').replace(/\p{M}+/gu, '').toLowerCase().match(/\d+|[a-z]+|[:.\-–—]/gu) ?? [];
+  // "twenty-eight" is one number, not a range.
+  return text.normalize('NFKD').replace(/\p{M}+/gu, '').toLowerCase()
+    .replace(/\b(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)-(?=[a-z])/gu, '$1 ').match(/\d+|[a-z]+|[:.\-–—]/gu) ?? [];
 }
 
 /** Reads number words, digits, Roman numerals and separators starting at `from`. */

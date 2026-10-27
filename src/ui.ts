@@ -5,6 +5,7 @@ import type { Reward } from './journey';
 import type { BibleTranslation } from './bible-catalog';
 import type { FoundVerse } from './search/rank';
 import type { ShownVerse } from './search/find';
+import type { Detection } from './live/detect';
 
 export type View = 'today' | 'plans' | 'find' | 'library' | 'review' | 'progress' | 'practice';
 export const NAV: readonly { view: Exclude<View, 'practice'>; label: string }[] = [
@@ -24,7 +25,17 @@ export interface FindState {
   shown: ShownVerse[];
   voice: VoiceState;
   meaning: MeaningState;
+  live: LiveState;
 }
+/** Live mode: off, asking for consent to the browser speech service, starting, or listening. Nothing here is saved. */
+export interface LiveState {
+  phase: 'off' | 'consent' | 'starting' | 'on';
+  /** When listening started, in milliseconds. */
+  started: number;
+  /** Verses heard so far, oldest first. */
+  detections: LiveItem[];
+}
+export interface LiveItem extends Detection { reference: string }
 /** Meaning search: idle (used automatically once downloaded), asking to download, or downloading. */
 export interface MeaningState {
   phase: 'idle' | 'consent' | 'downloading';

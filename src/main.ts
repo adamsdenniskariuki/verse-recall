@@ -14,6 +14,7 @@ import { library, progress, review, today } from './views/home';
 import { plansView } from './views/plans';
 import { findView } from './views/find';
 import { refreshVoice, stopVoice, voiceAction, type VoiceHost } from './find-voice';
+import { liveAction, showDetection, stopLive, type LiveHost } from './find-live';
 import { meaningAction, meaningHits, refreshMeaning } from './find-meaning';
 import { listenLabel, practice } from './views/practice';
 import { earnedBadges, recordPractice } from './journey';
@@ -46,7 +47,8 @@ Object.assign(ui, {
   tour: null,
   reward: null,
   tourInvite: !tourSeen && !loaded.state.run && Object.keys(loaded.state.progress).length === 0,
-  find: { query: '', translation: planTranslation(loaded.state.preferences.translation), busy: false, status: null, found: null, shown: [], voice: { phase: 'idle', progress: 0, downloaded: null }, meaning: { phase: 'idle', progress: 0, downloaded: null } },
+  find: { query: '', translation: planTranslation(loaded.state.preferences.translation), busy: false, status: null, found: null, shown: [], voice: { phase: 'idle', progress: 0, downloaded: null }, meaning: { phase: 'idle', progress: 0, downloaded: null },
+    live: { phase: 'off', started: 0, detections: [] } },
 });
 const media = matchMedia('(prefers-color-scheme: dark)');
 
@@ -115,7 +117,7 @@ function go(view: View): void {
     void findRuntime().then(m => m.preload()).catch(() => undefined);
     void refreshVoice(voiceHost);
     void refreshMeaning(voiceHost);
-  } else stopVoice();
+  } else { stopVoice(); stopLive(); }
 }
 /** Re-renders and puts focus back on the same control, so typing and keyboard use are not interrupted. */
 function renderKeepingFocus(): void {
@@ -145,6 +147,7 @@ function findStatus(message: string, error = false): void {
   setTimeout(() => { if (node.isConnected) node.textContent = message; }, 60);
 }
 const voiceHost: VoiceHost = { status: findStatus, render: renderKeepingFocus };
+const liveHost: LiveHost = { ...voiceHost, search: query => { ui.find.query = query; void runSearch(query); } };
 const failure = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
 async function runSearch(query: string): Promise<void> {
   const q = query.trim();
@@ -312,6 +315,7 @@ const preferencesDialog = new PreferencesDialog({
     persist();
     if (Object.hasOwn(patch, 'voice')) {
       stopVoice();
+      stopLive();
       ui.find.voice = { phase: 'idle', progress: 0, downloaded: null };
       void refreshVoice(voiceHost);
     }
@@ -345,6 +349,9 @@ app.addEventListener('click', event => {
   if (action === 'preferences') return preferencesDialog.open();
   if (action === 'browse-bibles') return biblePicker.open(ui.state.preferences.translation, ui.state.preferences.filter);
   if (action === 'add-personal') return preferencesDialog.open('personal');
+  if (action?.startsWith('live-')) return void liveAction(action, liveHost);
+  if (button.dataset.liveShow !== undefined) return showDetection(Number(button.dataset.liveShow), liveHost);
+  if (action === 'find-voice' && ui.find.live.phase !== 'off') return findStatus('Stop live listening first, then use the microphone button.', true);
   if (action === 'find-voice' || action?.startsWith('voice-')) return void voiceAction(action, voiceHost);
   if (action?.startsWith('meaning-')) return void meaningAction(action, voiceHost);
   if (Object.keys(button.dataset).some(key => key.startsWith('find'))) return void findAction(button);

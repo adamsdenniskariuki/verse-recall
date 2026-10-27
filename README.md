@@ -14,7 +14,8 @@ Live at **<https://verserecall.madebyfavor.com/>**.
   reference on Bible Gateway (NKJV, AMP, MSG, NLT, ESV); pick your preferred one in Settings.
 - **Find a verse:** type a half-remembered phrase, a few words or a reference (“John three
   sixteen”, “1 Cor 13 4”, “psalm xxiii”) and get ranked matches with highlighted words, nearby
-  verses and a WEB/BSB/KJV toggle. See [Find a verse](#find-a-verse).
+  verses and a WEB/BSB/KJV toggle. Ask for a topic (“verses about anxiety”), or use live mode to
+  list the verses quoted in a sermon. See [Find a verse](#find-a-verse).
 - **Rhythm:** spaced reviews, gentle streaks with saved streak freezes, XP and badges.
 - **Comfort:** serif scripture with a clean interface, a dyslexia-friendly reading font,
   several colour themes, light/dark mode that follows the system, and optional
@@ -31,9 +32,11 @@ flowchart LR
   T --> Q[Typed words or reference]
   Q --> R[Reference parser]
   Q --> K[Fuzzy keyword index]
+  Q --> P[Topic lists]
   Q -.->|optional download| E[Meaning: on-device embeddings]
   R --> M[Merge and rank]
   K --> M
+  P --> M
   E --> M
   M --> V[Top matches with context]
 ```
@@ -44,8 +47,12 @@ flowchart LR
 - **Keyword index** (`src/search/keyword.ts`, `normalize.ts`): one index over WEB British, BSB
   and KJV. Words are stemmed, archaic forms are folded (thee/thou/hath/-eth), and typos and
   sound-alike words (“feat” → “feet”) still match. Words that appear together in order rank higher.
+- **Topics** (`src/search/topic-data.ts`, `topics.ts`): 29 original topic lists written for Verse
+  Recall (anxiety, comfort, forgiveness, courage…); no published topical index is copied. Questions
+  such as “verses about anxiety” or “verses for when I am afraid” (typos allowed) return the list in
+  its curated order, labelled **Topic**, alongside keyword matches. Topics can also be browsed.
 - **Ranking** (`src/search/rank.ts`): results are merged; a verse found by more than one strategy
-  gets a small bonus. Each result shows a confidence and which strategy found it.
+  gets a small bonus (topic lists keep their curated order). Each result shows a confidence and which strategy found it.
 - **Build:** `npm run build:search` (`tools/build-search-index.ts`) writes
   `public/search/<id>/` (meta 128 KB + postings 645 KB; about 565 KB gzipped) and
   `src/search/version.ts`. The app verifies both files by SHA-256, and the service worker keeps
@@ -100,6 +107,20 @@ a one-time download (about 58 MB). It then finds verses that say the same thing 
 - **Quality:** `GOLDEN_MEANING` holds 16 paraphrases with few shared words. Top-3 accuracy:
   15/16 merged (keywords alone 10/16), and the main golden set stays at 44/44. “lamp for my feet”
   ranks Psalm 119:105 first.
+
+### Live mode
+
+For a sermon or Bible study: tap **Start live listening** and Verse Recall lists each verse that is
+**quoted** or **referenced**, with the time and the words heard. A recording indicator, timer and
+**Stop** button stay visible. Listening ends after 90 minutes, on leaving Find, or when the voice
+setting changes. Audio is never stored; heard words stay only in memory.
+
+- **Engines:** private voice (Whisper on this device, in 8-second pieces), or the browser speech
+  service after a consent note that says where audio goes (in Chrome, to Google).
+- **Detector** (`src/live/detect.ts`, lazy chunk): spoken references go through the reference
+  parser; quotes are found by keyword search over overlapping 12-word windows, keeping verses whose
+  words appear in order (typos and sound-alikes allowed) in WEB British, BSB or KJV wording. Each
+  verse is reported once, and near-identical parallel verses are folded together.
 
 ## Run locally
 
@@ -224,7 +245,7 @@ Vanilla TypeScript + Vite, with no UI framework or runtime dependencies.
 |---|---|
 | Controller and screens | `src/main.ts`, `src/ui.ts`, `src/views/*` (shell, today/library/review/progress, plans, practice) |
 | Learning engine | `src/engine.ts` (stages, hints, scoring, review intervals), `src/journey.ts` (streaks, XP, badges) |
-| Find a verse | `src/search/*` (lazy chunk), `src/views/find.ts`, `tools/build-search-index.ts`; voice in `src/find-voice.ts` and `src/voice/*` (lazy chunk and worker); meaning search in `src/find-meaning.ts`, `src/semantic/*` (lazy chunk and worker) and `tools/build_meaning_index.py` |
+| Find a verse | `src/search/*` (lazy chunk), `src/views/find.ts`, `tools/build-search-index.ts`; voice in `src/find-voice.ts` and `src/voice/*` (lazy chunk and worker); meaning search in `src/find-meaning.ts`, `src/semantic/*` (lazy chunk and worker) and `tools/build_meaning_index.py`; topics in `src/search/topic*.ts`; live mode in `src/find-live.ts` and `src/live/*` |
 | Content | `src/content.ts`, `src/plans.ts`, `src/bible-catalog.ts`, `src/bible-picker.ts` |
 | Saves and transfer | `src/store.ts` (validation, migration), `src/transfer.ts`, `src/personal.ts`, `src/preferences.ts` |
 | Look and sound | `src/theme.ts`, `src/styles/*.css`, `src/speech.ts`, `src/assets/verse-recall-mark.svg` |

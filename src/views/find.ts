@@ -5,18 +5,20 @@ import { loadStatus } from './home';
 import { privateModel, privateSize } from '../find-voice';
 import { MODELS } from '../voice/models';
 import { EMBEDDING, meaningSize } from '../semantic/models';
+import { TOPICS } from '../search/topic-data';
 
-const STRATEGY: Record<string, string> = { reference: 'Reference', keyword: 'Keywords', meaning: 'Meaning' };
+const STRATEGY: Record<string, string> = { reference: 'Reference', keyword: 'Keywords', meaning: 'Meaning', topic: 'Topic' };
 const TRANSLATIONS = [['webbe', 'WEB British'], ['bsb', 'BSB'], ['kjv', 'KJV']] as const;
 const EXAMPLES = ['lamp for my feet', 'John three sixteen', '1 Cor 13 4', 'the Lord is my shepherd', 'do not be anxious about anything'];
 
 /** A plain-HTML diagram so it reads well with screen readers and in every theme. */
 const diagram = () => `<details class="find-help"><summary>How Find a verse works</summary>
   <ol class="find-diagram" aria-label="How Find a verse works">
-    <li><strong>You type or speak</strong><span>A reference, a remembered phrase, or a few words. Speech becomes text you can check and edit first.</span></li>
-    <li><strong>Three searches</strong><span><b>Reference</b> reads “John three sixteen” or “1 Cor 13 4”. <b>Keywords</b> forgive typos, sound-alike words and old forms such as “thee” and “hath”. <b>Meaning</b> (optional download) finds verses that say the same thing in other words, such as “lamp for my feet”.</span></li>
+    <li><strong>You type or speak</strong><span>A reference, a remembered phrase, a few words, or a topic such as “verses about anxiety”. Speech becomes text you can check and edit first.</span></li>
+    <li><strong>Three searches</strong><span><b>Reference</b> reads “John three sixteen” or “1 Cor 13 4”. <b>Keywords</b> forgive typos, sound-alike words and old forms such as “thee” and “hath”. <b>Meaning</b> (optional download) finds verses that say the same thing in other words, such as “lamp for my feet”. A topic question also brings Verse Recall’s own list of verses on that topic.</span></li>
     <li><strong>Ranked results</strong><span>Matches are merged. A verse found by more than one search ranks higher. Each shows how it was found.</span></li>
   </ol>
+  <p class="small">Live mode keeps listening, for example during a sermon or Bible study, and lists each verse that is quoted or referenced. It turns each piece of speech into text, runs the reference and keyword searches on it, and keeps only close, in-order quotes. Audio is never stored.</p>
   <p class="small">Voice: the browser speech service may send audio to its provider (in Chrome, to Google). Private voice runs Whisper on this device after a one-time download, and audio is never uploaded or saved.</p>
   <p class="small">Search runs on this device. The search index is downloaded once (about 0.6 MB), checked for integrity and kept for offline use. Meaning search uses a small embedding model on this device after a one-time download; your words are never sent anywhere. Searches are saved only on this device and in your backups.</p></details>`;
 
@@ -103,6 +105,47 @@ function voicePanel(): string {
   return indicator + note;
 }
 
+export const clock = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const two = (n: number) => String(n).padStart(2, '0');
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${two(Math.floor(s / 60) % 60)}:${two(s % 60)}` : `${two(Math.floor(s / 60))}:${two(s % 60)}`;
+};
+
+/** Verses heard in live mode, newest first. Re-rendered in place as verses arrive. */
+export function liveList(): string {
+  const { detections, phase } = ui.find.live;
+  const items = detections.map((d, i) => `<li><div class="live-item-head"><strong>${e(d.reference)}</strong>
+    <span class="live-how">${d.how === 'quote' ? 'Quoted' : 'Referenced'} · ${clock(d.at * 1000)}</span></div>
+    <p class="small muted">“${e(d.heard)}”</p>
+    <button type="button" data-live-show="${i}" aria-label="Show ${e(d.reference)}">Show</button></li>`).reverse().join('');
+  return `<ol id="live-list" class="live-list" aria-label="Verses heard">${items || (phase === 'off' ? '' : '<li class="live-empty muted">No verses yet. They appear here as they are quoted or referenced.</li>')}</ol>`;
+}
+
+/** Live mode: an offer, a consent note for the browser speech service, or the listening indicator and list. */
+function livePanel(): string {
+  const live = ui.find.live;
+  const model = privateModel();
+  const list = live.detections.length ? `${liveList()}<button type="button" class="text-button" data-action="live-clear">Clear list</button>` : '';
+  if (live.phase === 'consent') return `<section class="voice-panel live-panel" aria-labelledby="live-consent-title">
+    <h2 id="live-consent-title">Listen live with the browser speech service?</h2>
+    <p class="small">Until you stop, everything the microphone hears is sent to your browser’s speech service to be turned into text. <strong>In Chrome, audio goes to Google.</strong> Verse Recall never stores audio. For live listening that stays on this device, choose private voice in <button type="button" class="text-button" data-action="preferences">Settings</button>.</p>
+    <div class="actions"><button type="button" class="primary" data-action="live-agree">Start live listening</button><button type="button" data-action="live-cancel">Not now</button></div></section>`;
+  if (live.phase === 'starting' || live.phase === 'on') return `<section class="voice-panel live-panel listening" aria-labelledby="live-title">
+    <div class="live-bar"><p class="voice-live" id="live-title"><span class="rec-dot" aria-hidden="true"></span><strong>Listening live</strong>
+      · <span id="live-time">${live.phase === 'on' ? clock(Date.now() - live.started) : 'starting'}</span> · audio is never stored</p>
+    <button type="button" class="primary" data-action="live-stop">Stop live listening</button></div>
+    <p class="small muted" id="live-heard"></p><p class="small" id="live-working"></p>
+    ${liveList()}</section>`;
+  return `<section class="live-panel" aria-labelledby="live-offer-title"><h2 id="live-offer-title" class="small">Live mode</h2>
+    <p class="small">Listening to a sermon or Bible study? Live mode lists each verse that is quoted or referenced. ${model
+      ? 'It uses private voice on this device.' : 'It uses your browser’s speech service.'} Audio is never stored.</p>
+    <button type="button" data-action="live-start">Start live listening</button>${list}</section>`;
+}
+
+const topics = () => `<details class="find-topics"><summary>Browse topics</summary>
+  <div class="find-chips">${TOPICS.map(t => `<button class="chip" data-find-query="verses about ${e(t.title.toLowerCase())}">${e(t.title)}</button>`).join('')}</div>
+  <p class="small muted">Topic lists are Verse Recall’s own selection of well-loved verses.</p></details>`;
+
 export function findView(): string {
   const find = ui.find;
   const history = ui.state.searches ?? [];
@@ -117,9 +160,11 @@ export function findView(): string {
       ${micButton()}<button class="primary" type="submit" ${find.busy ? 'aria-disabled="true"' : ''}>Search</button></div>
     </form>${voicePanel()}${meaningPanel()}
     <div class="find-chips" aria-label="Examples"><span class="small">Try</span>${EXAMPLES.map(q => `<button class="chip" data-find-query="${e(q)}">${e(q)}</button>`).join('')}</div>
+    ${topics()}
     ${history.length ? `<section class="find-history" aria-labelledby="find-history-title"><h2 id="find-history-title" class="small">Recent searches</h2>
       <div class="find-chips">${history.slice(0, 8).map(q => `<button class="chip" data-find-query="${e(q)}">${e(q)}</button>`).join('')}
       <button class="text-button" data-action="find-clear-history">Clear history</button></div></section>` : ''}
+    ${livePanel()}
     <div class="find-toolbar"><div class="segmented" role="group" aria-label="Show results in">${TRANSLATIONS.map(([id, name]) =>
       `<button data-find-translation="${id}" aria-pressed="${find.translation === id}">${name}</button>`).join('')}</div></div>
     <p id="find-status" class="load-status${find.status?.error ? ' error' : ''}" role="status" aria-live="polite">${e(find.status?.message ?? '')}</p>${loadStatus()}

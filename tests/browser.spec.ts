@@ -972,9 +972,8 @@ test('every section fits phones, tablets and desktops', async ({ page }) => {
       await page.locator(`nav [data-nav="${view}"]`).click();
       await expect(page.locator(`nav [data-nav="${view}"]`)).toHaveAttribute('aria-current', 'page');
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      const small = await page.locator('button:visible, select:visible, summary:visible').evaluateAll(nodes =>
-        nodes.filter(node => node.getBoundingClientRect().height < 44).map(node => node.textContent));
-      expect(small).toEqual([]);
+      await expect.poll(() => page.locator('button:visible, select:visible, summary:visible').evaluateAll(nodes =>
+        nodes.filter(node => node.getBoundingClientRect().height < 44).map(node => node.textContent))).toEqual([]);
       const nav = await page.locator('nav').boundingBox();
       const settings = await page.locator('#open-preferences').boundingBox();
       if (width < 900) expect(nav!.y).toBeGreaterThan(settings!.y + settings!.height - 1);
@@ -1153,6 +1152,14 @@ const FAKE_SPEECH = () => {
     heard: string[] = [];
     start() { (window as unknown as { __recognition: FakeRecognition }).__recognition = this; }
     say(text: string, isFinal = false) { this.heard = [text]; this.onresult?.({ results: [{ isFinal, 0: { transcript: text } }] }); }
+    results: { isFinal: boolean; 0: { transcript: string } }[] = [];
+    /** Continuous listening: replaces the pending interim result, or adds a new one. */
+    live(text: string, isFinal = false) {
+      const item = { isFinal, 0: { transcript: text } };
+      const last = this.results.length - 1;
+      if (last >= 0 && !this.results[last].isFinal) this.results[last] = item; else this.results.push(item);
+      this.onresult?.({ resultIndex: this.results.length - 1, results: this.results });
+    }
     stop() { this.onend?.(); }
     abort() { this.onerror?.({ error: 'aborted' }); this.onend?.(); }
     fail(error: string) { this.onerror?.({ error }); this.onend?.(); }
@@ -1446,4 +1453,160 @@ test('find a verse passes an accessibility sweep in light and dark at phone widt
     expect(await axeViolations(page), colorScheme).toEqual([]);
     await page.screenshot({ path: `verification/find-360-${colorScheme}.png`, fullPage: true });
   }
+});
+
+test('topics can be browsed or asked for and keep their curated order', async ({ page }) => {
+  await openFind(page);
+  await expect(page.locator('.find-topics summary')).toHaveText('Browse topics');
+  await page.locator('.find-topics summary').click();
+  await expect(page.locator('.find-topics .chip')).toHaveCount(29);
+  await page.locator('.find-topics [data-find-query="verses about anxiety and worry"]').click();
+  await expect(page.locator('#find-query')).toHaveValue('verses about anxiety and worry');
+  await expect(page.locator('.find-result').first().locator('h3')).toHaveText('Philippians 4:6–7');
+  await expect(page.locator('.find-result').first()).toContainText('Topic');
+  expect(await page.locator('.find-result').count()).toBeGreaterThan(6);
+  await page.locator('#find-query').fill('verses for when I am afraid');
+  await page.locator('#find-query').press('Enter');
+  await expect(page.locator('.find-result').first()).toContainText('Topic');
+});
+
+test('live mode lists verses quoted or referenced while listening', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(FAKE_SPEECH);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await openFind(page);
+  await page.locator('[data-action="live-start"]').click();
+  await expect(page.locator('#live-consent-title')).toHaveText('Listen live with the browser speech service?');
+  await expect(page.locator('.live-panel')).toContainText('In Chrome, audio goes to Google.');
+  await expect(page.locator('[data-action="live-agree"]')).toBeFocused();
+  await page.locator('[data-action="live-cancel"]').click();
+  await expect(page.locator('#find-status')).toHaveText('Live listening was not started.');
+  await expect(page.locator('[data-action="live-start"]')).toBeFocused();
+
+  await page.locator('[data-action="live-start"]').click();
+  await page.locator('[data-action="live-agree"]').click();
+  const stop = page.locator('[data-action="live-stop"]');
+  await expect(stop).toBeFocused();
+  await expect(page.locator('.live-panel')).toContainText('Listening live');
+  await expect(page.locator('.live-panel')).toContainText('audio is never stored');
+  await expect(page.locator('#live-time')).toHaveText(/^00:0\d$/u);
+  await expect(page.locator('.live-empty')).toBeVisible();
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForTimeout(300); // let colour transitions finish before measuring contrast
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await axeViolations(page), colorScheme).toEqual([]);
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+  await recognition(page, "window.__recognition.live('we all know the verse for God so')");
+  await expect(page.locator('#live-heard')).toHaveText('Hearing: “we all know the verse for God so”');
+  await recognition(page, "window.__recognition.live('we all know the verse for God so loved the world that he gave his one and only son', true)");
+  await expect(page.locator('#live-list li').first()).toContainText('John 3:16');
+  await expect(page.locator('#live-list li').first()).toContainText('Quoted');
+  await expect(page.locator('#find-status')).toHaveText('Heard John 3:16 (quoted).');
+  await expect(stop).toBeFocused();
+  await recognition(page, "window.__recognition.live('please turn with me to Romans eight twenty-eight', true)");
+  await expect(page.locator('#live-list li').first()).toContainText('Romans 8:28');
+  await expect(page.locator('#live-list li').first()).toContainText('Referenced');
+  await expect(page.locator('#live-list li')).toHaveCount(2);
+  // The service stops by itself now and then; live mode carries on.
+  await recognition(page, 'window.__recognition.onend()');
+  await recognition(page, "window.__recognition.live('the Lord is my shepherd I shall not want', true)");
+  await expect(page.locator('#live-list li')).toHaveCount(3);
+  await page.screenshot({ path: 'verification/find-live-360.png', fullPage: true });
+
+  await page.locator('[data-action="find-voice"]').click();
+  await expect(page.locator('#find-status')).toContainText('Stop live listening first');
+  await stop.click();
+  await expect(page.locator('#find-status')).toHaveText('Live listening stopped. 3 verses heard.');
+  await expect(page.locator('[data-action="live-start"]')).toBeFocused();
+  await expect(page.locator('#live-list li')).toHaveCount(3);
+  await page.locator('[data-live-show="1"]').click();
+  await expect(page.locator('#find-query')).toHaveValue('Romans 8:28');
+  await expect(page.locator('.find-result').first().locator('h3')).toHaveText('Romans 8:28');
+  await page.locator('[data-action="live-clear"]').click();
+  await expect(page.locator('#live-list')).toHaveCount(0);
+  await expect(page.locator('#find-status')).toHaveText('The list of heard verses was cleared.');
+
+  await page.locator('[data-action="live-start"]').click();
+  await page.locator('[data-action="live-agree"]').click();
+  await expect(stop).toBeVisible();
+  await page.locator('nav [data-nav="today"]').click();
+  await page.locator('nav [data-nav="find"]').click();
+  await expect(page.locator('[data-action="live-start"]')).toBeVisible();
+
+  await recognition(page, 'window.__recognition = null');
+  await page.locator('[data-action="live-start"]').click();
+  await page.locator('[data-action="live-agree"]').click();
+  await expect.poll(() => recognition(page, 'Boolean(window.__recognition)')).toBe(true);
+  await recognition(page, "window.__recognition.fail('not-allowed')");
+  await expect(page.locator('#find-status')).toContainText('Microphone access is blocked');
+  await expect(page.locator('#find-status')).toHaveClass(/error/);
+  await expect(page.locator('[data-action="live-start"]')).toBeFocused();
+  expect(errors).toEqual([]);
+});
+
+test('live mode explains when the browser has no speech service', async ({ page }) => {
+  await page.addInitScript(() => {
+    delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+    delete (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
+  });
+  await openFind(page);
+  await page.locator('[data-action="live-start"]').click();
+  await expect(page.locator('#find-status')).toContainText('Choose private voice in Settings to listen live on this device.');
+  await expect(page.locator('#find-status')).toHaveClass(/error/);
+});
+
+test.describe('private live mode', () => {
+  test.use({ permissions: ['microphone'] });
+  const LIVE_WHISPER = FAKE_WHISPER.replace('a lamp unto my feet', 'your word is a lamp to my feet and a light to my path [BLANK_AUDIO]');
+
+  test('needs private voice first, then listens on this device without sending audio', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const network: string[] = [];
+    page.on('request', request => { if (!request.url().startsWith('http://127.0.0.1')) network.push(request.url()); });
+    await page.route('**/whisper.worker*', route => route.fulfill({ status: 200, contentType: 'text/javascript', body: LIVE_WHISPER }));
+    await openFind(page);
+    await preferences(page);
+    await page.locator('#voice').selectOption('tiny');
+    await closePreferences(page);
+    await expect(page.locator('.live-panel')).toContainText('It uses private voice on this device.');
+    await page.locator('[data-action="live-start"]').click();
+    await expect(page.locator('#find-status')).toContainText('Live listening on this device needs private voice');
+    await expect(page.locator('[data-action="voice-download"]')).toBeFocused();
+    await page.locator('[data-action="voice-download"]').click();
+    await expect(page.locator('#find-status')).toContainText('Private voice is ready');
+
+    await page.locator('[data-action="live-start"]').click();
+    await expect(page.locator('#find-status')).toHaveText('Live listening on this device. Verses that are quoted or referenced will appear below.');
+    await expect(page.locator('#live-consent-title')).toHaveCount(0);
+    await page.waitForTimeout(600);
+    await page.locator('[data-action="live-stop"]').click();
+    await expect(page.locator('#find-status')).toHaveText('Live listening stopped. 1 verse heard.');
+    await expect(page.locator('#live-list li')).toHaveCount(1);
+    await expect(page.locator('#live-list li').first()).toContainText('Psalm 119:105');
+    await expect(page.locator('#live-list li').first()).not.toContainText('BLANK');
+    expect(network).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  test('reports a blocked microphone', async ({ page }) => {
+    await page.route('**/whisper.worker*', route => route.fulfill({ status: 200, contentType: 'text/javascript', body: LIVE_WHISPER }));
+    await page.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('denied', 'NotAllowedError'));
+    });
+    await openFind(page);
+    await preferences(page);
+    await page.locator('#voice').selectOption('tiny');
+    await closePreferences(page);
+    await page.locator('[data-action="live-start"]').click();
+    await page.locator('[data-action="voice-download"]').click();
+    await expect(page.locator('#find-status')).toContainText('Private voice is ready');
+    await page.locator('[data-action="live-start"]').click();
+    await expect(page.locator('#find-status')).toContainText('Microphone access is blocked');
+    await expect(page.locator('#find-status')).toHaveClass(/error/);
+    await expect(page.locator('[data-action="live-start"]')).toBeFocused();
+  });
 });
