@@ -32,6 +32,19 @@ export interface SavedState {
   run: Run | null;
   /** Streak and XP. Added after version 2 shipped, so it stays optional. */
   journey?: Journey;
+  /** Recent Find a verse searches, newest first. Optional so older saves and backups stay valid. */
+  searches?: string[];
+}
+export const MAX_SEARCHES = 20;
+export const MAX_SEARCH_LENGTH = 200;
+export const validSearches = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.length <= MAX_SEARCHES && new Set(value).size === value.length &&
+  value.every(q => typeof q === 'string' && q.length > 0 && q.length <= MAX_SEARCH_LENGTH && q.trim() === q);
+/** Puts a search first in the history, without duplicates, keeping the most recent searches. */
+export function rememberSearch(history: readonly string[] = [], query: string): string[] {
+  const q = query.trim().replace(/\s+/gu, ' ').slice(0, MAX_SEARCH_LENGTH).trim();
+  if (!q) return [...history];
+  return [q, ...history.filter(h => h !== q)].slice(0, MAX_SEARCHES);
 }
 export interface StoragePort {
   getItem(key: string): string | null;
@@ -84,8 +97,9 @@ export function validJourney(j: unknown): j is Journey {
 
 export function validState(value: unknown): value is SavedState {
   if (!record(value) || value.version !== 2 || !record(value.preferences) || !record(value.progress) ||
-      !safeTree(value) || !exactKeys(value, ['version', 'personal', 'preferences', 'progress', 'run', ...(Object.hasOwn(value, 'official') ? ['official'] : []), ...(Object.hasOwn(value, 'journey') ? ['journey'] : [])]) ||
+      !safeTree(value) || !exactKeys(value, ['version', 'personal', 'preferences', 'progress', 'run', ...(Object.hasOwn(value, 'official') ? ['official'] : []), ...      (Object.hasOwn(value, 'journey') ? ['journey'] : []), ...(Object.hasOwn(value, 'searches') ? ['searches'] : [])]) ||
       (Object.hasOwn(value, 'journey') && !validJourney(value.journey)) ||
+            (Object.hasOwn(value, 'searches') && !validSearches(value.searches)) ||
       !Array.isArray(value.personal) || value.personal.length > MAX_PERSONAL || !value.personal.every(validPersonal) ||
       new Set(value.personal.map(v => v.id)).size !== value.personal.length ||
       new Set(value.personal.map(v => v.revision)).size !== value.personal.length) return false;

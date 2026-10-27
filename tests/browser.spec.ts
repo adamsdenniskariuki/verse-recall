@@ -5,6 +5,7 @@ import { finish, firstLetters, startRun } from '../src/engine';
 import { localDay } from '../src/journey';
 import { makePersonal } from '../src/personal';
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 
 async function preferences(page: Page) {
   if (!await page.locator('#preferences-dialog').isVisible()) await page.locator('#open-preferences').click();
@@ -928,7 +929,7 @@ test('welcome tour invites new visitors, walks every section and can be replayed
   await expect(page.locator('.tour.invite')).toBeVisible();
   await expect(page.locator('main .tour')).toHaveCount(0);
   await page.locator('[data-action="tour"]').first().click();
-  const views = ['today', 'plans', 'library', 'review', 'progress'];
+  const views = ['today', 'plans', 'find', 'library', 'review', 'progress'];
   for (const [index, view] of views.entries()) {
     await expect(page.locator('.tour .eyebrow')).toContainText(`${index + 1} OF ${views.length}`);
     await expect(page.locator('#tour-title')).toBeFocused();
@@ -966,7 +967,7 @@ test('every section fits phones, tablets and desktops', async ({ page }) => {
   await page.goto('./');
   for (const width of [360, 768, 1440]) {
     await page.setViewportSize({ width, height: width === 360 ? 800 : 1000 });
-    for (const view of ['today', 'plans', 'library', 'review', 'progress']) {
+    for (const view of ['today', 'plans', 'find', 'library', 'review', 'progress']) {
       await page.locator(`nav [data-nav="${view}"]`).click();
       await expect(page.locator(`nav [data-nav="${view}"]`)).toHaveAttribute('aria-current', 'page');
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -1069,4 +1070,107 @@ test('read-aloud stays hidden when the browser cannot speak', async ({ page }) =
   await page.goto('./');
   await expect(page.locator('blockquote')).toHaveText(passages[0].text);
   await expect(page.locator('[data-action="listen"]')).toHaveCount(0);
+});const axePath = createRequire(import.meta.url).resolve('axe-core/axe.min.js');
+async function axeViolations(page: Page) {
+  await page.addScriptTag({ path: axePath });
+  return page.evaluate(async () => {
+    const axe = (window as unknown as { axe: { run: (context: Document, options: object) => Promise<{ violations: { id: string; nodes: { target: string[] }[] }[] }> } }).axe;
+    const result = await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } });
+    return result.violations.map(v => `${v.id}: ${v.nodes.map(n => n.target.join(' ')).join(', ')}`);
+  });
+}
+
+test('find a verse by phrase, typo or spoken reference and act on the results', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('./');
+  await page.locator('nav [data-nav="find"]').click();
+  await expect(page.locator('#page-title')).toHaveText('What do you remember?');
+  await page.locator('#find-query').fill('lamp for my feet');
+  await page.locator('#find-query').press('Enter');
+  const first = page.locator('.find-result').first();
+  await expect(first.locator('h3')).toHaveText('Psalm 119:105');
+  await expect(page.locator('#find-status')).toContainText('Best match: Psalm 119:105');
+  await expect(first.locator('mark')).toContainText(['lamp', 'feet']);
+  await expect(first.locator('.find-score')).toContainText('Keywords');
+  await expect(first.locator('.open-in a').first()).toHaveAttribute('href', /search=Psalm%20119%3A105&version=NKJV$/);
+  await first.locator('.find-context summary').click();
+  await expect(first.locator('.find-context p')).toHaveCount(5);
+
+  await page.locator('[data-find-translation="kjv"]').click();
+  await expect(page.locator('[data-find-translation="kjv"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-find-translation="kjv"]')).toBeFocused();
+  await expect(first.locator('blockquote')).toContainText('Thy word is a lamp unto my feet');
+  await first.locator('[data-find-add]').click();
+  await expect(page.locator('#find-status')).toContainText('added');
+  await first.locator('[data-find-add]').click();
+  await expect(page.locator('#find-status')).toContainText('already in your library');
+  let saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY);
+  expect(saved.official.map((v: { translation: string; book: string }) => v.translation)).toEqual(['kjv']);
+  expect(saved.searches).toEqual(['lamp for my feet']);
+
+  await page.locator('#find-query').fill('lamp unto my feat');
+  await page.locator('#find-query').press('Enter');
+  await expect(first.locator('h3')).toHaveText('Psalm 119:105');
+  await page.locator('[data-find-query="John three sixteen"]').first().click();
+  await expect(first.locator('h3')).toHaveText('John 3:16');
+  await expect(first.locator('.find-score')).toContainText('Reference');
+  await expect(page.locator('#find-query')).toHaveValue('John three sixteen');
+
+  await first.locator('[data-find-open]').click();
+  await expect(page.locator('#bible-translation')).toHaveValue('kjv');
+  await expect(page.locator('#bible-preview blockquote')).toContainText('For God so loved the world');
+  await page.locator('[data-bible-action="close"]').click();
+  await expect(first.locator('[data-find-open]')).toBeFocused();
+
+  await page.reload();
+  await page.locator('nav [data-nav="find"]').click();
+  const history = page.locator('.find-history .chip');
+  await expect(history).toHaveText(['John three sixteen', 'lamp unto my feat', 'lamp for my feet']);
+  await page.locator('[data-action="find-clear-history"]').click();
+  await expect(page.locator('.find-history')).toHaveCount(0);
+  saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY);
+  expect(saved.searches).toBeUndefined();
+
+  await page.locator('#find-query').fill('qwxz zzvv');
+  await page.locator('#find-query').press('Enter');
+  await expect(page.locator('.empty-state')).toContainText('No verses matched');
+  await page.locator('#find-query').fill('Romans 8:28');
+  await page.locator('#find-query').press('Enter');
+  await page.locator('.find-result').first().locator('[data-find-practise]').click();
+  await expect(page.locator('.practice-heading')).toContainText('Romans 8:28');
+  expect(errors).toEqual([]);
+});
+
+test('find a verse reports a broken search index', async ({ page }) => {
+  // A well-formed index with one altered word: only the SHA-256 check can catch it.
+  await page.route('**/search/**/meta.json', async route => {
+    const meta = await (await route.fetch()).json();
+    meta.vocab[meta.vocab.indexOf('lamp')] = 'lamb';
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(meta) });
+  });
+  await page.goto('./');
+  await page.locator('nav [data-nav="find"]').click();
+  await page.locator('#find-query').fill('lamp for my feet');
+  await page.locator('#find-query').press('Enter');
+  await expect(page.locator('#find-status')).toHaveClass(/error/);
+  await expect(page.locator('#find-status')).toContainText('integrity check');
+  await expect(page.locator('.find-result')).toHaveCount(0);
+});
+
+test('find a verse passes an accessibility sweep in light and dark at phone width', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.goto('./');
+    await page.locator('nav [data-nav="find"]').click();
+    await page.locator('#find-query').fill('the Lord is my shepherd');
+    await page.locator('#find-query').press('Enter');
+    await expect(page.locator('.find-result').first()).toBeVisible();
+    await page.locator('.find-result').first().locator('.find-context summary').click();
+    await page.locator('.find-help summary').click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await axeViolations(page), colorScheme).toEqual([]);
+    await page.screenshot({ path: `verification/find-360-${colorScheme}.png`, fullPage: true });
+  }
 });

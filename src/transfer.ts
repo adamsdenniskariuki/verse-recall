@@ -1,6 +1,6 @@
 import { passageKey, personalPassage, type PersonalVerse } from './content';
 import { exactKeys, makePersonal, MAX_JSON_BYTES, MAX_PERSONAL, parseBoundedJson, record, validId, validVerseInput, verifyRevisions, verseFields } from './personal';
-import { migratePreferences, validState, type SavedState } from './store';
+import { MAX_SEARCHES, migratePreferences, validState, type SavedState } from './store';
 import { bibleSelectionKey, prepareOfficialSelections } from './bible-catalog';
 import { mergeJourney } from './journey';
 
@@ -113,6 +113,9 @@ export function planImport(current: SavedState, incoming: ImportPayload, options
     }
     const journey = mergeJourney(next.journey, incoming.state.journey);
     if (journey) next.journey = structuredClone(journey);
+    if (incoming.state.searches?.length) {
+      next.searches = [...new Set([...(next.searches ?? []), ...incoming.state.searches])].slice(0, MAX_SEARCHES);
+    }
     if (options.preferences) {
       next.preferences = structuredClone(incoming.state.preferences);
       plan.warnings.push('Appearance and content preferences will use the backup values.');

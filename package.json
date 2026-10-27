@@ -7,7 +7,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/engine.test.ts",
+    "test": "tsx --test tests/engine.test.ts tests/search.test.ts",
+    "build:search": "tsx tools/build-search-index.ts",
     "test:browser": "playwright test",
     "test:pages": "playwright test --config playwright.pages.config.ts",
     "test:mutations": "node tests/mutations.mjs",
@@ -16,6 +17,7 @@
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/node": "^22.18.0",
+    "axe-core": "^4.14.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "vite": "^7.1.0"

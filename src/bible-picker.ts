@@ -15,6 +15,8 @@ export class BiblePicker {
   private end = 1;
   private generation = 0;
   private preview?: { selection: BibleSelection; passage: Passage };
+  private target?: { book: string; chapter: number; start: number; end: number };
+  private returnFocus: HTMLElement | null = null;
 
   constructor(private add: (selection: BibleSelection, passage: Passage) => string, private openIn: () => OpenIn = () => DEFAULT_OPEN_IN) {
     this.dialog.className = 'preferences-dialog';
@@ -23,7 +25,8 @@ export class BiblePicker {
     document.body.append(this.dialog);
     this.dialog.addEventListener('close', () => {
       this.generation++;
-      document.querySelector<HTMLElement>('[data-action="browse-bibles"]')?.focus();
+      const back = this.returnFocus?.isConnected ? this.returnFocus : document.querySelector<HTMLElement>('[data-action="browse-bibles"]');
+      back?.focus();
     });
     this.dialog.addEventListener('keydown', event => {
       if (event.key !== 'Tab') return;
@@ -66,10 +69,13 @@ export class BiblePicker {
       void this.showPreview();
     });
   }
-  open(translation: string, filter: Filter): void {
+  /** Opens the picker, optionally at a specific book, chapter and verse range (used by Find a verse). */
+  open(translation: string, filter: Filter, target?: { book: string; chapter: number; start: number; end: number }): void {
     if (this.dialog.open) return;
+    this.returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.translation = translation === 'bsb' || translation === 'kjv' ? translation : 'webbe';
-    this.filter = filter;
+    this.filter = target ? 'both' : filter;
+    this.target = target;
     this.query = '';
     this.dialog.showModal();
     void this.load();
@@ -84,6 +90,15 @@ export class BiblePicker {
       if (generation !== this.generation) return;
       this.index = index;
       this.chooseBook();
+      const target = this.target;
+      this.target = undefined;
+      const chapter = target && this.books().find(b => b.id === target.book)?.chapters.find(c => c.number === target.chapter);
+      if (target && chapter) {
+        this.book = target.book;
+        this.chapter = target.chapter;
+        this.start = chapter.verses.includes(target.start) ? target.start : chapter.verses[0];
+        this.end = chapter.verses.includes(target.end) && target.end >= this.start ? target.end : this.start;
+      }
       this.render();
       this.dialog.querySelector<HTMLElement>(focusId ? `#${focusId}` : '[data-bible-action="close"]')!.focus();
       await this.showPreview();

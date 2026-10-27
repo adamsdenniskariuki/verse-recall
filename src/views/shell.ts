@@ -6,7 +6,7 @@ import { NAV, ui, type View } from '../ui';
 
 export function header(): string {
   const due = dueReviews(ui.state, Date.now()).length;
-  return `<header class="header"><a class="brand" href="#" data-nav="today" aria-label="Verse Recall home"><span class="brand-mark" aria-hidden="true">${brandMark}</span><span>Verse Recall<small>BIBLE MEMORY</small></span></a>
+  return `<header class="header"><a class="brand" href="#" data-nav="today" aria-label="Verse Recall home"><span class="brand-mark" aria-hidden="true">${brandMark}</span><span>Verse Recall<small aria-hidden="true"></small></span></a>
     <nav aria-label="Main">${NAV.map(item => `<button data-nav="${item.view}" ${ui.view === item.view ? 'aria-current="page"' : ''}>${item.label}${item.view === 'review' && due ? ` <span class="count"><span aria-hidden="true">${due}</span><span class="sr-only">(${due} ready)</span></span>` : ''}</button>`).join('')}</nav>
     <button id="open-preferences" data-action="preferences" aria-haspopup="dialog" aria-controls="preferences-dialog"><span aria-hidden="true" class="gear">⚙</span> Settings</button></header>`;
 }
@@ -23,6 +23,7 @@ export function notice(): string {
 export const TOUR: readonly { view: Exclude<View, 'practice'>; title: string; body: string }[] = [
   { view: 'today', title: 'Today', body: 'Each day brings a verse of the day, your current plan and any reviews that are ready. Small moments, kept faithfully.' },
   { view: 'plans', title: 'Plans', body: 'Curated plans walk through Psalm 23, the Beatitudes, the Armour of God, a verse a week for a year and more, one passage at a time.' },
+  { view: 'find', title: 'Find a verse', body: 'Half-remember a verse? Type a phrase, a few words or a reference like “John three sixteen” and Verse Recall finds it, even with typos. It all runs on this device.' },
   { view: 'library', title: 'Library', body: 'Every passage you are learning lives here. Choose any verse from the WEB British, Berean Standard Bible or King James Version, or add your own.' },
   { view: 'review', title: 'Practice & review', body: 'Read, fill the gaps, arrange the words, then recall from memory. Hints are always there and honestly recorded. Reviews return when it is time.' },
   { view: 'progress', title: 'Progress', body: 'A gentle record of what you have kept. Settings holds themes, readable fonts, dark mode and private backups. Nothing leaves this device.' },
