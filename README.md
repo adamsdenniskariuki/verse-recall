@@ -10,7 +10,8 @@ Live at **<https://verserecall.madebyfavor.com/>**.
   Beatitudes, the Lord’s Prayer, Fruit of the Spirit, the Armour of God, comfort for
   anxious days, promises, and a verse a week for a year), a verse of the day, and the
   whole 66-book Bible in **WEB British**, **BSB** and the **KJV** via a book/chapter/verse picker.
-  You can also add personal passages.
+  You can also add personal passages. Official passages have **Open in** links to the same
+  reference on Bible Gateway (NKJV, AMP, MSG, NLT, ESV); pick your preferred one in Settings.
 - **Rhythm:** spaced reviews, gentle streaks with saved streak freezes, XP and badges.
 - **Comfort:** serif scripture with a clean interface, a dyslexia-friendly reading font,
   several colour themes, light/dark mode that follows the system, and optional
@@ -97,7 +98,8 @@ device; no multi-tab sync.
 ## Content provenance and rights
 
 Only public-domain/CC0 texts are bundled. **NIV, ESV and NKJV are not included**, and no
-licence is claimed for them. Shuffled or hidden text is presented as a learning exercise,
+licence is claimed for them. The **Open in** links only open biblegateway.com in a new tab
+(`rel="noopener noreferrer"`); no text from those translations is fetched, bundled or cached. Shuffled or hidden text is presented as a learning exercise,
 not an altered translation.
 
 | Translation | Source | Rights |

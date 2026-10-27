@@ -792,6 +792,38 @@ test('KJV is an opt-in third translation with its rights note', async ({ page })
   await expect(page.locator('.verse-card')).toHaveCount(4);
 });
 
+test('open in links show the same reference on Bible Gateway', async ({ page }) => {
+  const external: string[] = [];
+  page.on('request', request => { if (request.url().includes('biblegateway')) external.push(request.url()); });
+  await page.goto('./');
+  await page.locator('.verse-card [data-start]').first().click();
+  const reference = (await page.locator('.verse-citation').textContent())!.split(' · ')[0];
+  const links = page.locator('.practice-card .open-in a');
+  await expect(links).toHaveText(['NKJV ↗', 'AMP ↗', 'MSG ↗', 'NLT ↗', 'ESV ↗']);
+  for (const link of await links.all()) {
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    await expect(link).toHaveAttribute('aria-label', new RegExp(`^Open ${reference} in the .+ on Bible Gateway \\(opens in a new tab\\)$`));
+  }
+  await expect(links.first()).toHaveAttribute('href', `https://www.biblegateway.com/passage/?search=${encodeURIComponent(reference)}&version=NKJV`);
+  await page.locator('[data-nav="today"]').first().click();
+  await preferences(page);
+  await expect(page.locator('#openIn')).toHaveValue('NKJV');
+  await page.locator('#openIn').selectOption('ESV');
+  await closePreferences(page);
+  const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY);
+  expect(saved.preferences.openIn).toBe('ESV');
+  await page.reload();
+  await expect(links.first()).toHaveText('ESV ↗');
+  await expect(links.first()).toHaveAttribute('href', /version=ESV$/);
+  await page.locator('[data-nav="today"]').first().click();
+  await chooseBibleVerse(page, 'webbe', 'John', '3', '16');
+  await expect(page.locator('#bible-preview .open-in a').first()).toHaveAttribute('href', 'https://www.biblegateway.com/passage/?search=John%203%3A16&version=ESV');
+  await page.locator('#bible-end').selectOption('17');
+  await expect(page.locator('#bible-preview .open-in a').first()).toHaveAttribute('href', 'https://www.biblegateway.com/passage/?search=John%203%3A16-17&version=ESV');
+  expect(external).toEqual([]);
+});
+
 test('Bible picker shows loading errors and rejects oversized ranges', async ({ page }) => {
   await page.route('**/bibles/**/manifest.json', route => route.abort());
   await page.goto('./');

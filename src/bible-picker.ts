@@ -1,6 +1,7 @@
 import { loadBibleEdition, resolveBibleSelection, snapshotFor, type BibleBook, type BibleEdition, type BibleSelection, type BibleTranslation } from './bible-catalog';
 import { editions, type Filter, type Passage } from './content';
 import { escapeHtml as e, options } from './html';
+import { DEFAULT_OPEN_IN, openInLinks, type OpenIn } from './open-in';
 
 export class BiblePicker {
   readonly dialog = document.createElement('dialog');
@@ -15,7 +16,7 @@ export class BiblePicker {
   private generation = 0;
   private preview?: { selection: BibleSelection; passage: Passage };
 
-  constructor(private add: (selection: BibleSelection, passage: Passage) => string) {
+  constructor(private add: (selection: BibleSelection, passage: Passage) => string, private openIn: () => OpenIn = () => DEFAULT_OPEN_IN) {
     this.dialog.className = 'preferences-dialog';
     this.dialog.id = 'bible-picker';
     this.dialog.setAttribute('aria-labelledby', 'bible-picker-title');
@@ -149,7 +150,7 @@ export class BiblePicker {
       this.dialog.querySelector('#bible-preview')!.innerHTML = `<h3>${e(passage.reference)}</h3><blockquote class="verse">${e(passage.text)}</blockquote>
         <p class="small">${e(editions[this.translation].name)} · ${e(passage.edition)}</p>
         <p class="small">${e(editions[this.translation].rights)}</p>
-        <p><a href="${passage.source}" target="_blank" rel="noreferrer">Official text source ↗</a> · <a href="${editions[this.translation].rightsUrl}" target="_blank" rel="noreferrer">Rights ↗</a></p>`;
+        <p><a href="${passage.source}" target="_blank" rel="noreferrer">Official text source ↗</a> · <a href="${editions[this.translation].rightsUrl}" target="_blank" rel="noreferrer">Rights ↗</a></p>${openInLinks(passage.reference, this.openIn())}`;
       button.disabled = false;
       this.status('Review the exact wording, then add this passage.');
     } catch (error) {

@@ -1,7 +1,8 @@
-import { createProvider, type Filter, type Translation, type PersonalVerse } from './content';
+import { createProvider, passages, type Filter, type Translation, type PersonalVerse } from './content';
 import { activeIndices, words, type Progress, type Run } from './engine';
 import { exactKeys, MAX_JSON_BYTES, MAX_PERSONAL, parseBoundedJson, record, safeTree, validPersonal, verifyRevisions } from './personal';
 import { MAX_FREEZES, MAX_XP, type Journey } from './journey';
+import { OPEN_IN, type OpenIn } from './open-in';
 import { bibleSelectionKey, MAX_OFFICIAL, prepareOfficialSelections, selectedBiblePassages, validBibleSelection, type BibleSelection } from './bible-catalog';
 
 export interface Preferences {
@@ -13,6 +14,8 @@ export interface Preferences {
   font: 'serif' | 'readable' | 'segoe' | 'aptos' | 'calibri' | 'mono';
   /** Appearance settings the person explicitly chose. Unlisted settings follow the current defaults. */
   chosen?: AppearanceKey[];
+  /** Preferred Bible Gateway version for "Open in" links. Optional so older saves stay valid. */
+  openIn?: OpenIn;
 }
 export const APPEARANCE_KEYS = ['preset', 'colour', 'accent', 'font'] as const;
 export type AppearanceKey = typeof APPEARANCE_KEYS[number];
@@ -92,13 +95,14 @@ export function validState(value: unknown): value is SavedState {
   const official = Array.isArray(value.official) && value.official.every(validBibleSelection) ? value.official : [];
   const provider = createProvider(value.personal, selectedBiblePassages(official));
   const p = value.preferences;
-  if (!exactKeys(p, ['translation', 'filter', 'preset', 'colour', 'accent', 'font', ...(Object.hasOwn(p, 'chosen') ? ['chosen'] : [])]) ||
+  if (!exactKeys(p, ['translation', 'filter', 'preset', 'colour', 'accent', 'font', ...(Object.hasOwn(p, 'chosen') ? ['chosen'] : []), ...(Object.hasOwn(p, 'openIn') ? ['openIn'] : [])]) ||
+      (Object.hasOwn(p, 'openIn') && !oneOf(p.openIn, OPEN_IN)) ||
       !oneOf(p.translation, ['webbe', 'bsb', 'kjv', 'personal']) || !oneOf(p.filter, ['both', 'OT', 'NT']) ||
       !oneOf(p.preset, ['calm', 'study', 'focus']) || !oneOf(p.colour, ['light', 'dark', 'system']) ||
       !oneOf(p.accent, ACCENTS) || !oneOf(p.font, FONTS) ||
       (Object.hasOwn(p, 'chosen') && (!Array.isArray(p.chosen) || !p.chosen.every(key => oneOf(key, APPEARANCE_KEYS)) ||
         new Set(p.chosen).size !== p.chosen.length)) ||
-      Object.keys(value.progress).length > MAX_PERSONAL + official.length + 6) return false;
+      Object.keys(value.progress).length > MAX_PERSONAL + official.length + passages.length) return false;
   for (const [key, progress] of Object.entries(value.progress)) {
     if (!provider.get(key) || !record(progress) || progress.key !== key ||
         !exactKeys(progress, ['key', 'attempts', 'unaided', 'streak', 'bankCompleted', 'lastResult', 'lastPractised', 'due']) ||
