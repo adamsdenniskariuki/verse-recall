@@ -23,6 +23,14 @@ export interface FindState {
   /** Wording of each result in the chosen translation, in the same order as found. */
   shown: ShownVerse[];
   voice: VoiceState;
+  meaning: MeaningState;
+}
+/** Meaning search: idle (used automatically once downloaded), asking to download, or downloading. */
+export interface MeaningState {
+  phase: 'idle' | 'consent' | 'downloading';
+  progress: number;
+  /** Whether the model and verse vectors are on this device, or null before checking. */
+  downloaded: boolean | null;
 }
 /** idle, or the step voice input is on: asking to download, downloading, listening, starting the private engine, or transcribing. */
 export type VoicePhase = 'idle' | 'consent' | 'downloading' | 'listening' | 'preparing' | 'transcribing';

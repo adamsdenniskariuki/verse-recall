@@ -33,7 +33,8 @@ self.addEventListener('activate', event => {
 
 async function cacheFirst(request, name) {
   const cache = await caches.open(name);
-  const hit = await cache.match(request);
+  // Cached files are versioned, so a Vary header (e.g. Origin on module scripts) must not cause an offline miss.
+  const hit = await cache.match(request, { ignoreVary: true });
   if (hit) return hit;
   const response = await fetch(request);
   if (response.ok) await cache.put(request, response.clone());

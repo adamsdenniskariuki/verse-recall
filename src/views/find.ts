@@ -4,8 +4,9 @@ import { ui } from '../ui';
 import { loadStatus } from './home';
 import { privateModel, privateSize } from '../find-voice';
 import { MODELS } from '../voice/models';
+import { EMBEDDING, meaningSize } from '../semantic/models';
 
-const STRATEGY: Record<string, string> = { reference: 'Reference', keyword: 'Keywords' };
+const STRATEGY: Record<string, string> = { reference: 'Reference', keyword: 'Keywords', meaning: 'Meaning' };
 const TRANSLATIONS = [['webbe', 'WEB British'], ['bsb', 'BSB'], ['kjv', 'KJV']] as const;
 const EXAMPLES = ['lamp for my feet', 'John three sixteen', '1 Cor 13 4', 'the Lord is my shepherd', 'do not be anxious about anything'];
 
@@ -13,11 +14,30 @@ const EXAMPLES = ['lamp for my feet', 'John three sixteen', '1 Cor 13 4', 'the L
 const diagram = () => `<details class="find-help"><summary>How Find a verse works</summary>
   <ol class="find-diagram" aria-label="How Find a verse works">
     <li><strong>You type or speak</strong><span>A reference, a remembered phrase, or a few words. Speech becomes text you can check and edit first.</span></li>
-    <li><strong>Three searches</strong><span><b>Reference</b> reads “John three sixteen” or “1 Cor 13 4”. <b>Keywords</b> forgive typos, sound-alike words and old forms such as “thee” and “hath”. <b>Meaning</b> search is coming soon.</span></li>
+    <li><strong>Three searches</strong><span><b>Reference</b> reads “John three sixteen” or “1 Cor 13 4”. <b>Keywords</b> forgive typos, sound-alike words and old forms such as “thee” and “hath”. <b>Meaning</b> (optional download) finds verses that say the same thing in other words, such as “lamp for my feet”.</span></li>
     <li><strong>Ranked results</strong><span>Matches are merged. A verse found by more than one search ranks higher. Each shows how it was found.</span></li>
   </ol>
   <p class="small">Voice: the browser speech service may send audio to its provider (in Chrome, to Google). Private voice runs Whisper on this device after a one-time download, and audio is never uploaded or saved.</p>
-  <p class="small">Search runs on this device. The search index is downloaded once (about 0.6 MB), checked for integrity and kept for offline use. Searches are saved only on this device and in your backups.</p></details>`;
+  <p class="small">Search runs on this device. The search index is downloaded once (about 0.6 MB), checked for integrity and kept for offline use. Meaning search uses a small embedding model on this device after a one-time download; your words are never sent anywhere. Searches are saved only on this device and in your backups.</p></details>`;
+
+/** Offers the optional meaning search download, shows its progress, or notes that it is on. */
+function meaningPanel(): string {
+  const meaning = ui.find.meaning;
+  const size = meaningSize();
+  if (meaning.phase === 'consent') return `<section class="voice-panel meaning-panel" aria-labelledby="meaning-consent-title">
+    <h2 id="meaning-consent-title">Download meaning search?</h2>
+    <p class="small">A one-time download of about <strong>${size}</strong>: the ${e(EMBEDDING.label)} model from Hugging Face, the ONNX runtime from jsDelivr (shared with private voice) and Verse Recall’s verse vectors. Every file is checked against a fixed fingerprint and kept on this device, so it also works offline. Your searches never leave this device.</p>
+    <div class="actions"><button type="button" class="primary" data-action="meaning-download">Download ${size}</button><button type="button" data-action="meaning-cancel">Not now</button></div></section>`;
+  if (meaning.phase === 'downloading') {
+    const percent = Math.floor(meaning.progress * 100);
+    return `<section class="voice-panel meaning-panel" aria-label="Meaning search download">
+    <label for="meaning-progress">Downloading meaning search (${size})</label>
+    <div class="voice-progress"><progress id="meaning-progress" max="100" value="${percent}"></progress><span id="meaning-progress-text">${percent}%</span></div>
+    <button type="button" data-action="meaning-cancel">Cancel download</button></section>`;
+  }
+  if (meaning.downloaded) return `<p class="small meaning-note">Meaning search is on, private and available offline. <button type="button" class="text-button" data-action="meaning-remove">Remove download</button></p>`;
+  return `<p class="small meaning-note">Remember the idea but not the words? <button type="button" class="text-button" data-action="meaning-offer">Turn on meaning search</button> (one-time download, about ${size}).</p>`;
+}
 
 function result(index: number): string {
   const f = ui.find.found![index];
@@ -95,7 +115,7 @@ export function findView(): string {
       <label for="find-query">Words, phrase or reference</label>
       <div class="find-row"><input id="find-query" type="search" name="q" autocomplete="off" spellcheck="false" maxlength="200" value="${e(find.query)}" placeholder="For example, a lamp for my feet">
       ${micButton()}<button class="primary" type="submit" ${find.busy ? 'aria-disabled="true"' : ''}>Search</button></div>
-    </form>${voicePanel()}
+    </form>${voicePanel()}${meaningPanel()}
     <div class="find-chips" aria-label="Examples"><span class="small">Try</span>${EXAMPLES.map(q => `<button class="chip" data-find-query="${e(q)}">${e(q)}</button>`).join('')}</div>
     ${history.length ? `<section class="find-history" aria-labelledby="find-history-title"><h2 id="find-history-title" class="small">Recent searches</h2>
       <div class="find-chips">${history.slice(0, 8).map(q => `<button class="chip" data-find-query="${e(q)}">${e(q)}</button>`).join('')}

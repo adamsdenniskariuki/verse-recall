@@ -26,7 +26,7 @@ export class IntegrityError extends Error {}
  * Progress counts bytes across all files, including ones already on the device.
  */
 export async function downloadVerified(files: VoiceFile[], cache: CacheLike, onProgress: (loaded: number, total: number) => void,
-  fetcher: typeof fetch = fetch): Promise<void> {
+  fetcher: typeof fetch = fetch, feature = 'private voice'): Promise<void> {
   const total = files.reduce((sum, file) => sum + file.bytes, 0);
   let loaded = 0;
   const pending: VoiceFile[] = [];
@@ -38,21 +38,21 @@ export async function downloadVerified(files: VoiceFile[], cache: CacheLike, onP
   for (const file of pending) {
     let response: Response;
     try { response = await fetcher(file.url, { cache: 'no-store', credentials: 'omit' }); }
-    catch { throw new Error('The private voice download stopped. Check your connection and try again.'); }
-    if (!response.ok || !response.body) throw new Error(`The private voice download failed (HTTP ${response.status}). Try again later.`);
+    catch { throw new Error(`The ${feature} download stopped. Check your connection and try again.`); }
+    if (!response.ok || !response.body) throw new Error(`The ${feature} download failed (HTTP ${response.status}). Try again later.`);
     const reader = response.body.getReader();
     const bytes = new Uint8Array(file.bytes);
     let received = 0;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (received + value.byteLength > file.bytes) { await reader.cancel(); throw new IntegrityError('A private voice file was larger than expected, so it was not kept.'); }
+      if (received + value.byteLength > file.bytes) { await reader.cancel(); throw new IntegrityError(`A ${feature} file was larger than expected, so it was not kept.`); }
       bytes.set(value, received);
       received += value.byteLength;
       loaded += value.byteLength;
       onProgress(loaded, total);
     }
-    if (received !== file.bytes || await sha256(bytes.buffer) !== file.sha256) throw new IntegrityError('A private voice file failed its integrity check, so it was not kept. Try again later.');
+    if (received !== file.bytes || await sha256(bytes.buffer) !== file.sha256) throw new IntegrityError(`A ${feature} file failed its integrity check, so it was not kept. Try again later.`);
     // Each file is kept only once verified. A later failure leaves earlier good files for the next attempt;
     // the engine never starts until every file is present and verified.
     await cache.put(file.url, new Response(bytes.buffer, { headers: { 'content-length': String(file.bytes) } }));

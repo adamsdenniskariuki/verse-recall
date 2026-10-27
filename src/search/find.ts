@@ -2,7 +2,7 @@
 import { loadBibleEdition, readBibleChapter, type BibleTranslation } from '../bible-catalog';
 import { loadKeywordIndex } from './load';
 import { stem, wordSpans } from './normalize';
-import { findVerses, type FoundVerse } from './rank';
+import { findVerses, type FoundVerse, type MeaningHit } from './rank';
 
 export interface Segment { text: string; mark: boolean }
 export interface ShownVerse {
@@ -31,9 +31,9 @@ export function highlight(text: string, terms: readonly string[]): Segment[] {
 /** Fetches and verifies the index in the background so the first search is quick. */
 export const preload = () => loadKeywordIndex();
 
-export async function search(query: string, translation: BibleTranslation): Promise<FoundVerse[]> {
+export async function search(query: string, translation: BibleTranslation, meaning: readonly MeaningHit[] = []): Promise<FoundVerse[]> {
   const index = await loadKeywordIndex();
-  const found = await findVerses(query, index, (book, chapter) => readBibleChapter(translation, book, chapter), 6);
+  const found = await findVerses(query, index, (book, chapter) => readBibleChapter(translation, book, chapter), 6, meaning);
   return found.filter(f => f.confidence >= 0.2);
 }
 

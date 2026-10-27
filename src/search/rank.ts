@@ -2,8 +2,17 @@ import type { VerseRef } from './index-format';
 import { phraseScore, type KeywordIndex } from './keyword';
 import { parseReferences } from './reference';
 
-export type Strategy = 'reference' | 'keyword';
-export const STRATEGY_NAMES: Record<Strategy, string> = { reference: 'Reference', keyword: 'Keywords' };
+export type Strategy = 'reference' | 'keyword' | 'meaning';
+export const STRATEGY_NAMES: Record<Strategy, string> = { reference: 'Reference', keyword: 'Keywords', meaning: 'Meaning' };
+/** A verse the meaning model found, with its cosine similarity to the query. */
+export interface MeaningHit { ordinal: number; similarity: number }
+/** Similarities at or below this floor give no confidence; MEANING_CEIL and above give full confidence. */
+export const MEANING_FLOOR = 0.5;
+export const MEANING_CEIL = 0.85;
+/** Turns the model's cosine similarity into a 0–1 confidence comparable with keyword scores. */
+export function meaningScore(similarity: number): number {
+  return Math.max(0, Math.min(1, (similarity - MEANING_FLOOR) / (MEANING_CEIL - MEANING_FLOOR)));
+}
 export interface Candidate { ordinal: number; score: number; strategy: Strategy; terms?: string[]; end?: number; chapterOnly?: boolean }
 export interface FoundVerse extends VerseRef {
   ordinal: number;
@@ -44,8 +53,11 @@ export function mergeResults(lists: Candidate[][], ref: (ordinal: number) => Ver
     .slice(0, limit);
 }
 
-/** Runs reference parsing and keyword search, refines the best keyword matches with phrase order, and ranks them together. */
-export async function findVerses(query: string, index: KeywordIndex, text: ChapterText, limit = 10): Promise<FoundVerse[]> {
+/**
+ * Runs reference parsing and keyword search, refines the best keyword matches with phrase order, and ranks them
+ * together with any meaning-search hits.
+ */
+export async function findVerses(query: string, index: KeywordIndex, text: ChapterText, limit = 10, meaningHits: readonly MeaningHit[] = []): Promise<FoundVerse[]> {
   const references: Candidate[] = parseReferences(query, index.table).flatMap(hit => {
     const ordinal = index.table.ordinal(hit.book, hit.chapter, hit.verse);
     return ordinal === undefined ? [] : [{ ordinal, score: hit.confidence, strategy: 'reference' as const, end: hit.end, chapterOnly: hit.chapterOnly }];
@@ -59,5 +71,9 @@ export async function findVerses(query: string, index: KeywordIndex, text: Chapt
     return { ordinal: hit.ordinal, score: 0.85 * hit.score + 0.12 * phrase, strategy: 'keyword' as const, terms: hit.terms };
   }));
   const rest: Candidate[] = hits.slice(15).map(hit => ({ ordinal: hit.ordinal, score: 0.85 * hit.score, strategy: 'keyword', terms: hit.terms }));
-  return mergeResults([references, keyword, rest], ordinal => index.ref(ordinal), limit);
+  const meaning: Candidate[] = meaningHits.flatMap(hit => {
+    const score = meaningScore(hit.similarity);
+    return score > 0 ? [{ ordinal: hit.ordinal, score, strategy: 'meaning' as const }] : [];
+  });
+  return mergeResults([references, keyword, rest, meaning], ordinal => index.ref(ordinal), limit);
 }
